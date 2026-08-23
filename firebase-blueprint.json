@@ -33,6 +33,8 @@
         "turbidity": { "type": "number", "description": "Turbidity in NTU" },
         "ph": { "type": "number", "description": "pH level" },
         "waterLevel": { "type": "number", "description": "Water level in ml" },
+        "maxCapacity": { "type": "number", "description": "Maximum water capacity in ml" },
+        "isDevelopment": { "type": "boolean", "description": "Whether this is a test/development bottle" },
         "lastUpdated": { "type": "string", "description": "Last telemetry timestamp" }
       }
     },

@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteField, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 
 const KNOWN_HARDWARE_BOTTLES = [
@@ -12,6 +12,7 @@ const KNOWN_HARDWARE_BOTTLES = [
     ph: 7.4,
     waterLevel: 650,
     maxCapacity: 750,
+    isDevelopment: true,
   },
   {
     bottleId: 'ASX-4109-8831',
@@ -23,6 +24,7 @@ const KNOWN_HARDWARE_BOTTLES = [
     ph: 7.2,
     waterLevel: 580,
     maxCapacity: 750,
+    isDevelopment: true,
   },
   {
     bottleId: 'ASX-3301-7719',
@@ -34,6 +36,7 @@ const KNOWN_HARDWARE_BOTTLES = [
     ph: 7.1,
     waterLevel: 420,
     maxCapacity: 750,
+    isDevelopment: true,
   },
   {
     bottleId: 'ASX-5510-1284',
@@ -45,6 +48,7 @@ const KNOWN_HARDWARE_BOTTLES = [
     ph: 7.5,
     waterLevel: 700,
     maxCapacity: 750,
+    isDevelopment: true,
   },
   {
     bottleId: 'ASX-7700-1122',
@@ -56,6 +60,7 @@ const KNOWN_HARDWARE_BOTTLES = [
     ph: 7.3,
     waterLevel: 500,
     maxCapacity: 750,
+    isDevelopment: true,
   },
   {
     bottleId: 'ASX-1024-9000',
@@ -67,14 +72,15 @@ const KNOWN_HARDWARE_BOTTLES = [
     ph: 7.3,
     waterLevel: 600,
     maxCapacity: 750,
+    isDevelopment: true,
   },
 ];
 
 let isSeedingDone = false;
 
 /**
- * Initializes known AquaSense X hardware bottles in Cloud Firestore if they do not exist.
- * Preserves existing ownerUid and telemetry.
+ * Initializes known AquaSense X development bottles in Cloud Firestore if they do not exist.
+ * Preserves existing ownerUid, migrates legacy ownerId if present, and ensures isDevelopment: true.
  */
 export async function ensureKnownBottlesSeeded(): Promise<void> {
   if (isSeedingDone) return;
@@ -96,10 +102,27 @@ export async function ensureKnownBottlesSeeded(): Promise<void> {
           ph: item.ph,
           waterLevel: item.waterLevel,
           maxCapacity: item.maxCapacity,
+          isDevelopment: true,
           lastUpdated: new Date().toISOString(),
           serverCreatedAt: serverTimestamp(),
           serverUpdatedAt: serverTimestamp(),
         });
+      } else {
+        const data = snap.data();
+        const updates: Record<string, any> = {};
+        if (data.isDevelopment === undefined) {
+          updates.isDevelopment = true;
+        }
+        // Migrate legacy ownerId to ownerUid if found
+        if ('ownerId' in data && !('ownerUid' in data)) {
+          updates.ownerUid = data.ownerId;
+          updates.ownerId = deleteField();
+        } else if ('ownerId' in data && ('ownerUid' in data)) {
+          updates.ownerId = deleteField();
+        }
+        if (Object.keys(updates).length > 0) {
+          await updateDoc(bottleRef, updates);
+        }
       }
     }
   } catch (err) {

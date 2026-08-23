@@ -28,13 +28,14 @@ interface ProfileScreenProps {
 }
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) => {
-  const { user, signOut, deleteAccount, updateUserProfile } = useAuth();
+  const { user, signOut, deleteAccount, updateUserProfile, unpairBottle } = useAuth();
   const { bottle, hydrationGoal, updateHydrationGoal } = useBottle();
   const { theme, toggleTheme } = useTheme();
 
   const [tempGoal, setTempGoal] = useState<number>(hydrationGoal);
   const [isSavedGoal, setIsSavedGoal] = useState<boolean>(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+  const [isReleasingBottle, setIsReleasingBottle] = useState<boolean>(false);
   const [notificationState, setNotificationState] = useState(
     user?.notifications || {
       drinkReminders: true,
@@ -150,11 +151,21 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
             </div>
 
             <button
-              onClick={onChangeBottle}
-              className="flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-white/[0.06] hover:bg-[#00D1FF]/15 text-white hover:text-[#00D1FF] border border-white/10 hover:border-[#00D1FF]/30 text-xs font-medium transition-all shadow-sm touch-target sm:min-h-0 sm:min-w-0"
+              onClick={async () => {
+                if (isReleasingBottle) return;
+                setIsReleasingBottle(true);
+                try {
+                  await unpairBottle();
+                  onChangeBottle();
+                } finally {
+                  setIsReleasingBottle(false);
+                }
+              }}
+              disabled={isReleasingBottle}
+              className="flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-white/[0.06] hover:bg-[#00D1FF]/15 text-white hover:text-[#00D1FF] border border-white/10 hover:border-[#00D1FF]/30 text-xs font-medium transition-all shadow-sm touch-target sm:min-h-0 sm:min-w-0 disabled:opacity-50"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Change</span>
+              <RefreshCw className={`w-3.5 h-3.5 ${isReleasingBottle ? 'animate-spin' : ''}`} />
+              <span>{isReleasingBottle ? 'Releasing...' : 'Change'}</span>
             </button>
           </div>
 

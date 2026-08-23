@@ -32,6 +32,7 @@ export interface BottleData {
   waterLevel: number; // in ml, e.g. 0 - 750 ml
   maxCapacity?: number; // e.g. 750 ml
   lastUpdated: string;
+  isDevelopment?: boolean;
   qualityScore?: number;
   qualityCategory?: WaterQualityCategory;
   isStale?: boolean;

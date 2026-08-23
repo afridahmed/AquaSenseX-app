@@ -69,26 +69,16 @@ export class FirestoreSensorDataProvider implements ISensorDataProvider {
             const data = snap.data() as Partial<BottleData>;
             emitEvaluated(data);
           } else {
-            // Seed initial state in Firestore
-            const initialData = {
+            // Document does not exist in Firestore - do NOT auto-create!
+            // Emit offline/empty state in memory only
+            emitEvaluated({
               bottleId: cleanedId,
               ownerUid: null,
-              online: true,
-              battery: 88,
-              temperature: 21.4,
-              tds: 182,
-              turbidity: 0.4,
-              ph: 7.2,
-              waterLevel: 650,
+              online: false,
+              battery: 0,
+              waterLevel: 0,
               maxCapacity: 750,
-              lastUpdated: new Date().toISOString(),
-              serverCreatedAt: serverTimestamp(),
-              serverUpdatedAt: serverTimestamp(),
-            };
-            setDoc(bottleRef, initialData).catch((err) => {
-              console.warn('Initial bottle seed deferred:', err);
             });
-            emitEvaluated(initialData);
           }
         },
         (error) => {

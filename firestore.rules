@@ -22,24 +22,28 @@ service cloud.firestore {
     }
 
     // 2. IoT Bottles:
-    // Authenticated users can check bottle presence and status.
-    // Bottle ownership is strictly protected: an already owned bottle cannot be claimed or overwritten by a different user.
+    // Production & dev bottles must already exist in registry. Arbitrary user creation is blocked.
+    // Bottle claiming is atomic and secure: unowned bottles can only be claimed by setting ownerUid = request.auth.uid.
+    // Owned bottles can only be updated or released by their registered owner.
     match /bottles/{bottleId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
+      allow create: if false; // Users cannot create arbitrary production bottles
       allow update: if isAuthenticated() && (
-        resource == null ||
-        !('ownerUid' in resource.data) ||
-        resource.data.ownerUid == null ||
-        resource.data.ownerUid == '' ||
-        resource.data.ownerUid == request.auth.uid
+        // Case 1: Claiming an unowned bottle
+        ((resource.data.ownerUid == null || resource.data.ownerUid == '') && request.resource.data.ownerUid == request.auth.uid) ||
+        // Case 2: Current registered owner updating telemetry or releasing bottle (setting ownerUid to null)
+        (resource.data.ownerUid == request.auth.uid && (request.resource.data.ownerUid == request.auth.uid || request.resource.data.ownerUid == null))
       );
-      allow delete: if isAuthenticated() && resource.data.ownerUid == request.auth.uid;
+      allow delete: if false;
 
       // Subcollection for bottle sensor logs
       match /readings/{readingId} {
         allow read: if isAuthenticated();
-        allow create: if isAuthenticated();
+        allow create: if isAuthenticated() && (
+          request.resource.data.uid == request.auth.uid ||
+          get(/databases/$(database)/documents/bottles/$(bottleId)).data.ownerUid == request.auth.uid
+        );
+        allow update, delete: if false;
       }
     }
 

@@ -19,6 +19,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  runTransaction,
   serverTimestamp,
 } from 'firebase/firestore';
 
@@ -315,14 +316,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const currentUid = user.uid;
       const currentBottleId = user.bottleId;
 
-      // Disassociate bottle if exists
+      // Disassociate bottle if exists and owned by current user
       if (currentBottleId) {
         try {
           const bottleRef = doc(db, 'bottles', currentBottleId);
-          await updateDoc(bottleRef, {
-            ownerUid: null,
-            lastUpdated: new Date().toISOString(),
-            serverUpdatedAt: serverTimestamp(),
+          await runTransaction(db, async (transaction) => {
+            const snap = await transaction.get(bottleRef);
+            if (snap.exists() && snap.data().ownerUid === currentUid) {
+              transaction.update(bottleRef, {
+                ownerUid: null,
+                lastUpdated: new Date().toISOString(),
+                serverUpdatedAt: serverTimestamp(),
+              });
+            }
           });
         } catch (e) {
           console.warn('Could not release bottle ownership:', e);
@@ -371,82 +377,107 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Pair bottle with Firestore verification & ownership association
+  // Pair bottle with Firestore atomic transaction & ownership verification
   const pairBottle = async (bottleId: string) => {
-    if (!user) throw new Error('You must be signed in to pair a bottle.');
+    if (!user || !auth.currentUser) throw new Error('You must be signed in to pair a bottle.');
     const cleaned = bottleId.trim().toUpperCase();
+    const currentUid = auth.currentUser.uid;
 
-    // 1. Find and verify bottle in Firestore
     const bottleRef = doc(db, 'bottles', cleaned);
-    const bottleSnap = await getDoc(bottleRef);
+    const userRef = doc(db, 'users', currentUid);
 
-    if (!bottleSnap.exists()) {
-      // Must return exact message as requested
-      throw new Error('Could not find this AquaSense X bottle.');
-    }
+    // Atomically check registry and claim ownership in a single Firestore transaction
+    await runTransaction(db, async (transaction) => {
+      const bottleSnap = await transaction.get(bottleRef);
 
-    const bottleData = bottleSnap.data();
-    // 2. Verify bottle is not already owned by another user
-    if (bottleData.ownerUid && bottleData.ownerUid !== user.uid) {
-      // Must return exact message as requested
-      throw new Error('This bottle is already paired with another account.');
-    }
+      // 1. Nonexistent bottle in registry -> reject immediately and do NOT create document
+      if (!bottleSnap.exists()) {
+        throw new Error("That Bottle ID isn't registered with AquaSense X.");
+      }
 
-    // 3. Associate ownerUid with current user's UID
-    await updateDoc(bottleRef, {
-      ownerUid: user.uid,
-      lastUpdated: new Date().toISOString(),
-      serverUpdatedAt: serverTimestamp(),
+      const bottleData = bottleSnap.data();
+      const existingOwnerUid = bottleData.ownerUid ?? null;
+
+      // 2. Already owned by a different user -> reject claim
+      if (existingOwnerUid && existingOwnerUid !== currentUid) {
+        throw new Error('This bottle is already paired with another account.');
+      }
+
+      // 3. Unowned (or already owned by current user) -> claim bottle
+      transaction.update(bottleRef, {
+        ownerUid: currentUid,
+        online: true,
+        lastUpdated: new Date().toISOString(),
+        serverUpdatedAt: serverTimestamp(),
+      });
+
+      // 4. Update user profile with new bottleId
+      transaction.update(userRef, {
+        bottleId: cleaned,
+        updatedAt: new Date().toISOString(),
+        serverUpdatedAt: serverTimestamp(),
+      });
     });
 
-    // 4. Save bottleId in users/{uid}
-    const userRef = doc(db, 'users', user.uid);
-    await updateDoc(userRef, {
-      bottleId: cleaned,
-      updatedAt: new Date().toISOString(),
-      serverUpdatedAt: serverTimestamp(),
-    });
-
-    // 5. Update state
-    setUser({
-      ...user,
-      bottleId: cleaned,
-      updatedAt: new Date().toISOString(),
-    });
+    // 5. Update local React state after successful transaction
+    setUser((prev) =>
+      prev
+        ? {
+            ...prev,
+            bottleId: cleaned,
+            updatedAt: new Date().toISOString(),
+          }
+        : null
+    );
 
     setIsPairingModalOpen(false);
   };
 
   // Unpair / Change bottle (Profile -> My Bottle -> Change Bottle)
   const unpairBottle = async () => {
-    if (!user) return;
+    if (!user || !auth.currentUser) return;
     const currentBottle = user.bottleId;
+    const currentUid = auth.currentUser.uid;
 
     if (currentBottle) {
       try {
         const bottleRef = doc(db, 'bottles', currentBottle);
-        await updateDoc(bottleRef, {
-          ownerUid: null,
-          lastUpdated: new Date().toISOString(),
-          serverUpdatedAt: serverTimestamp(),
+        // Atomically release bottle ONLY if current user is the verified owner
+        await runTransaction(db, async (transaction) => {
+          const snap = await transaction.get(bottleRef);
+          if (snap.exists() && snap.data().ownerUid === currentUid) {
+            transaction.update(bottleRef, {
+              ownerUid: null,
+              lastUpdated: new Date().toISOString(),
+              serverUpdatedAt: serverTimestamp(),
+            });
+          }
         });
       } catch (err) {
         console.warn('Could not release bottle ownership:', err);
       }
     }
 
-    const userRef = doc(db, 'users', user.uid);
-    await updateDoc(userRef, {
-      bottleId: null,
-      updatedAt: new Date().toISOString(),
-      serverUpdatedAt: serverTimestamp(),
-    });
+    try {
+      const userRef = doc(db, 'users', currentUid);
+      await updateDoc(userRef, {
+        bottleId: null,
+        updatedAt: new Date().toISOString(),
+        serverUpdatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.warn('Could not reset user bottleId:', err);
+    }
 
-    setUser({
-      ...user,
-      bottleId: null,
-      updatedAt: new Date().toISOString(),
-    });
+    setUser((prev) =>
+      prev
+        ? {
+            ...prev,
+            bottleId: null,
+            updatedAt: new Date().toISOString(),
+          }
+        : null
+    );
 
     setIsPairingModalOpen(true);
   };
