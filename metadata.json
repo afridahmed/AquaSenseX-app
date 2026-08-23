@@ -1,0 +1,6 @@
+{
+  "name": "AquaSense X",
+  "description": "Smart water safety and hydration platform connected to the physical AquaSense X smart water bottle with live IoT sensor readings, AI hydration coaching, and community water mapping.",
+  "requestFramePermissions": ["geolocation", "notifications"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

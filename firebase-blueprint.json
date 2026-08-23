@@ -1,0 +1,85 @@
+{
+  "entities": {
+    "UserProfile": {
+      "collection": "users",
+      "description": "User account profiles with paired bottle ID and preferences",
+      "fields": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string", "description": "User full name" },
+        "email": { "type": "string", "description": "Email address" },
+        "photoUrl": { "type": "string", "description": "Profile picture URL" },
+        "bottleId": { "type": "string", "description": "Bonded AquaSense X Bottle ID" },
+        "hydrationGoal": { "type": "number", "description": "Daily hydration quota in ml" },
+        "theme": { "type": "string", "description": "Interface color theme" },
+        "notificationSettings": { "type": "object", "description": "Notification alert toggles" },
+        "createdAt": { "type": "string", "description": "Account registration timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update timestamp" }
+      },
+      "rules": {
+        "read": "request.auth != null && request.auth.uid == resource.id",
+        "write": "request.auth != null && request.auth.uid == resource.id"
+      }
+    },
+    "Bottle": {
+      "collection": "bottles",
+      "description": "AquaSense X hardware bottle telemetry and ownership registry",
+      "fields": {
+        "bottleId": { "type": "string", "description": "Bottle ID serial (ASX-XXXX-XXXX)" },
+        "ownerUid": { "type": "string", "description": "Owner User UID or null" },
+        "online": { "type": "boolean", "description": "Hardware online status" },
+        "battery": { "type": "number", "description": "Battery percentage" },
+        "temperature": { "type": "number", "description": "Liquid temperature in Celsius" },
+        "tds": { "type": "number", "description": "Total Dissolved Solids in ppm" },
+        "turbidity": { "type": "number", "description": "Turbidity in NTU" },
+        "ph": { "type": "number", "description": "pH level" },
+        "waterLevel": { "type": "number", "description": "Water level in ml" },
+        "lastUpdated": { "type": "string", "description": "Last telemetry timestamp" }
+      }
+    },
+    "SensorReading": {
+      "collection": "readings",
+      "description": "Historical IoT sensor quality snapshots recorded by bottles",
+      "fields": {
+        "uid": { "type": "string", "description": "Owner UID" },
+        "bottleId": { "type": "string", "description": "Bottle ID" },
+        "temperature": { "type": "number", "description": "Liquid temperature" },
+        "tds": { "type": "number", "description": "Total Dissolved Solids in ppm" },
+        "turbidity": { "type": "number", "description": "Turbidity in NTU" },
+        "ph": { "type": "number", "description": "pH level" },
+        "waterLevel": { "type": "number", "description": "Water level in ml" },
+        "qualityScore": { "type": "number", "description": "Evaluated 0-100 score" },
+        "timestamp": { "type": "string", "description": "Reading ISO timestamp" }
+      }
+    },
+    "HydrationLog": {
+      "collection": "hydrationLogs",
+      "description": "User fluid intake logs and history",
+      "fields": {
+        "uid": { "type": "string", "description": "User UID" },
+        "amountMl": { "type": "number", "description": "Consumed amount in ml" },
+        "timestamp": { "type": "string", "description": "Consumption ISO timestamp" },
+        "source": { "type": "string", "description": "Log source (bottle_auto, manual_add, quick_preset)" },
+        "note": { "type": "string", "description": "Optional log notes" }
+      }
+    },
+    "CommunityReport": {
+      "collection": "communityReports",
+      "description": "Crowdsourced public water quality reports",
+      "fields": {
+        "uid": { "type": "string", "description": "Reporting User UID" },
+        "bottleId": { "type": "string", "description": "Bottle ID used for measurement" },
+        "sourceName": { "type": "string", "description": "Water source location name" },
+        "latitude": { "type": "number", "description": "GPS latitude" },
+        "longitude": { "type": "number", "description": "GPS longitude" },
+        "qualityScore": { "type": "number", "description": "Overall quality score" },
+        "temperature": { "type": "number", "description": "Temperature in C" },
+        "tds": { "type": "number", "description": "TDS in ppm" },
+        "turbidity": { "type": "number", "description": "Turbidity in NTU" },
+        "ph": { "type": "number", "description": "pH level" },
+        "verifiedReports": { "type": "number", "description": "Verification count" },
+        "createdAt": { "type": "string", "description": "Created ISO timestamp" },
+        "lastTestedAt": { "type": "string", "description": "Last tested description" }
+      }
+    }
+  }
+}

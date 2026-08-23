@@ -1,0 +1,12 @@
+{
+  "projectId": "aquasensex",
+  "appId": "1:265747341235:web:48b18d04f06cb60497f5c6",
+  "apiKey": "AIzaSyD0x8k3rm9mnwKvRraY1rJeXTJFG1fZdBI",
+  "authDomain": "aquasensex.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-aquasensex-06ac2c65-a8b8-4418-8835-cf104b72ca4d",
+  "storageBucket": "aquasensex.firebasestorage.app",
+  "messagingSenderId": "265747341235",
+  "measurementId": "",
+  "oAuthClientId": "265747341235-fjcdqpoijh5r9c4e98tnd0pueih3m0rf.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
+}
