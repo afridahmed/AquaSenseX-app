@@ -75,12 +75,14 @@ export interface CommunityReport {
   turbidity: number;
   ph: number;
   verifiedReports: number;
+  verifiedUids?: string[];
   createdAt: string;
   lastTestedAt: string;
   authorName?: string;
   sourceType?: 'fountain' | 'tap' | 'spring' | 'filtration_station' | 'well' | 'other' | string;
   userHasVerified?: boolean;
   notes?: string;
+  distanceKm?: number;
 }
 
 export type WaterQualityCategory = 'Excellent' | 'Good' | 'Caution' | 'Poor';

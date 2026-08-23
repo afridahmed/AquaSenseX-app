@@ -16,6 +16,7 @@ const MainAppContent: React.FC = () => {
   const { user, loading, isPairingModalOpen, setIsPairingModalOpen } = useAuth();
   const [splashFinished, setSplashFinished] = useState<boolean>(false);
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
 
   // Step 1: Splash Screen
   if (!splashFinished) {
@@ -60,11 +61,16 @@ const MainAppContent: React.FC = () => {
         return (
           <DashboardScreen
             onNavigateToTab={(tab) => setCurrentTab(tab)}
-            onPublishToCommunity={() => setCurrentTab('community')}
+            onPublishToCommunity={(report) => {
+              if (report?.id) {
+                setSelectedReportId(report.id);
+              }
+              setCurrentTab('community');
+            }}
           />
         );
       case 'community':
-        return <CommunityMapScreen />;
+        return <CommunityMapScreen initialSelectedReportId={selectedReportId} />;
       case 'coach':
         return <AICoachScreen />;
       case 'profile':
