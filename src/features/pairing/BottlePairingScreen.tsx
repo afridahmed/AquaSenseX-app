@@ -75,30 +75,30 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center p-4 sm:p-6 select-none relative overflow-hidden text-[#F5F5F5]">
+    <div className="min-h-screen bg-[#090B0E] flex items-center justify-center p-3.5 xs:p-4 sm:p-6 select-none relative overflow-hidden text-[#F8FAFC]">
       {/* Ambient background glow */}
-      <div className="absolute w-[600px] h-[600px] rounded-full bg-[#00D1FF]/5 blur-[150px] pointer-events-none" />
+      <div className="absolute w-[500px] sm:w-[600px] h-[500px] sm:h-[600px] rounded-full bg-[#00D1FF]/5 blur-[120px] sm:blur-[150px] pointer-events-none" />
 
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-lg bg-[#141414] border border-[#222222] rounded-[32px] p-6 sm:p-8 shadow-2xl relative z-10"
+        className="w-full max-w-lg bg-[#12161C] border border-white/5 rounded-[28px] sm:rounded-[32px] p-5 xs:p-6 sm:p-8 shadow-2xl relative z-10 my-auto"
       >
         {/* Cancel button if changing bottle */}
         {isChangeBottle && (
           <button
             onClick={() => setIsPairingModalOpen(false)}
-            className="absolute right-6 top-6 text-xs text-[#888888] hover:text-white"
+            className="absolute right-5 sm:right-6 top-5 sm:top-6 text-xs text-neutral-400 hover:text-white p-2 touch-target sm:min-h-0 sm:min-w-0"
           >
             Cancel
           </button>
         )}
 
         {/* Pairing Hardware Animation Illustration */}
-        <div className="flex items-center justify-center my-6">
-          <div className="relative flex items-center gap-8">
+        <div className="flex items-center justify-center my-4 sm:my-6">
+          <div className="relative flex items-center gap-6 sm:gap-8">
             {/* User Phone */}
-            <div className="w-14 h-24 rounded-2xl bg-[#0A0A0A] border-2 border-[#222222] flex flex-col items-center justify-between p-2 shadow-lg">
+            <div className="w-12 sm:w-14 h-20 sm:h-24 rounded-2xl bg-[#090B0E] border-2 border-white/10 flex flex-col items-center justify-between p-2 shadow-lg">
               <div className="w-4 h-1 rounded-full bg-white/20" />
               <div className="w-6 h-6 rounded-full bg-[#00D1FF]/10 flex items-center justify-center">
                 <Droplets className="w-3.5 h-3.5 text-[#00D1FF]" />
@@ -108,44 +108,44 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
 
             {/* Wireless Connecting Radio Waves */}
             <div className="flex flex-col items-center gap-1">
-              <div className="relative flex items-center justify-center w-16">
+              <div className="relative flex items-center justify-center w-14 sm:w-16">
                 <motion.div
                   animate={{
-                    scale: [1, 1.4, 1],
+                    scale: [1, 1.35, 1],
                     opacity: [0.3, 0.8, 0.3],
                   }}
                   transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
-                  className="w-10 h-10 rounded-full bg-[#00D1FF]/10 border border-[#00D1FF]/30 flex items-center justify-center"
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#00D1FF]/10 border border-[#00D1FF]/30 flex items-center justify-center"
                 >
                   <Wifi className="w-4 h-4 text-[#00D1FF]" />
                 </motion.div>
               </div>
-              <span className="text-[10px] font-mono text-[#00D1FF] uppercase tracking-widest mt-1">
+              <span className="text-[9px] sm:text-[10px] font-mono text-[#00D1FF] uppercase tracking-widest mt-1">
                 BLE / Wi-Fi
               </span>
             </div>
 
             {/* AquaSense X Smart Bottle */}
-            <div className="w-12 h-28 rounded-2xl bg-[#0A0A0A] border-2 border-[#00D1FF]/40 flex flex-col items-center justify-between p-1.5 shadow-lg shadow-[#00D1FF]/10 relative">
+            <div className="w-11 sm:w-12 h-24 sm:h-28 rounded-2xl bg-[#090B0E] border-2 border-[#00D1FF]/40 flex flex-col items-center justify-between p-1.5 shadow-lg shadow-[#00D1FF]/10 relative">
               {/* Bottle cap UV sensor */}
-              <div className="w-8 h-4 rounded-lg bg-[#1E1E1E] border border-white/10 flex items-center justify-center">
+              <div className="w-7 sm:w-8 h-3.5 sm:h-4 rounded-lg bg-white/[0.06] border border-white/10 flex items-center justify-center">
                 <div className="w-2 h-2 rounded-full bg-[#00D1FF] animate-pulse" />
               </div>
               {/* Liquid chamber */}
-              <div className="w-full h-14 rounded-lg bg-[#00D1FF]/15 border border-[#00D1FF]/30 flex items-center justify-center">
+              <div className="w-full h-12 sm:h-14 rounded-lg bg-[#00D1FF]/15 border border-[#00D1FF]/30 flex items-center justify-center">
                 <span className="text-[8px] font-mono text-[#00D1FF]">ESP32</span>
               </div>
-              <div className="w-7 h-1.5 rounded-full bg-white/20" />
+              <div className="w-6 sm:w-7 h-1 sm:h-1.5 rounded-full bg-white/20" />
             </div>
           </div>
         </div>
 
         {/* Text Header */}
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold tracking-tight text-white font-sans">
+        <div className="text-center mb-5 sm:mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans">
             Connect Your AquaSense X
           </h1>
-          <p className="text-xs text-[#888888] mt-1.5 max-w-sm mx-auto leading-relaxed">
+          <p className="text-xs text-neutral-400 mt-1 max-w-sm mx-auto leading-relaxed px-2">
             Enter the 8-character ID laser-engraved under the silicone base of your AquaSense X bottle.
           </p>
         </div>
@@ -157,7 +157,7 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
               initial={{ opacity: 0, y: -5 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="mb-5 p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2"
+              className="mb-4 sm:mb-5 p-3 sm:p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2"
             >
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
               <span>{errorMessage}</span>
@@ -168,7 +168,7 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
             <motion.div
               initial={{ opacity: 0, y: -5 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-5 p-3.5 rounded-2xl bg-[#00D1FF]/10 border border-[#00D1FF]/30 text-[#00D1FF] text-xs flex items-center justify-between"
+              className="mb-4 sm:mb-5 p-3 sm:p-3.5 rounded-2xl bg-[#00D1FF]/10 border border-[#00D1FF]/30 text-[#00D1FF] text-xs flex items-center justify-between"
             >
               <div className="flex items-center gap-2">
                 <Cpu className="w-4 h-4 text-[#00D1FF] animate-spin" />
@@ -182,7 +182,7 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="mb-5 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-3"
+              className="mb-4 sm:mb-5 p-3.5 sm:p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-3"
             >
               <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
               <div>
@@ -196,7 +196,7 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
         {/* Pairing Form */}
         <form onSubmit={handleConnect} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-[#888888] mb-1.5">
+            <label className="block text-xs font-medium text-neutral-400 mb-1.5">
               Bottle Serial ID
             </label>
             <div className="relative">
@@ -207,22 +207,22 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
                 onChange={(e) => handleInputChange(e.target.value)}
                 placeholder="ASX-XXXX-XXXX"
                 maxLength={13}
-                className="w-full bg-[#0A0A0A] border border-[#222222] rounded-2xl px-4 py-3 text-base font-mono text-center tracking-widest text-[#00D1FF] focus:outline-none focus:border-[#00D1FF]/50 transition-colors uppercase"
+                className="w-full bg-[#090B0E] border border-white/10 rounded-2xl px-4 py-3 text-base sm:text-lg font-mono text-center tracking-widest text-[#00D1FF] focus:outline-none focus:border-[#00D1FF]/50 transition-colors uppercase"
               />
             </div>
           </div>
 
-          {/* Quick Test ID presets */}
+          {/* Device ID presets */}
           <div>
-            <div className="flex items-center justify-between text-[11px] text-[#888888] mb-1.5">
-              <span>Quick Test Hardware:</span>
-              <span className="text-[#555555]">Click to autofill</span>
+            <div className="flex items-center justify-between text-[11px] text-neutral-400 mb-1.5">
+              <span>Registered Device Presets:</span>
+              <span className="text-neutral-500">Tap to select</span>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => handleInputChange('ASX-9821-4402')}
-                className="p-3 rounded-2xl bg-[#0A0A0A] border border-[#222222] hover:border-[#00D1FF]/40 text-left text-xs font-mono text-[#F5F5F5] transition-colors"
+                className="p-3 rounded-2xl bg-[#090B0E] border border-white/5 hover:border-[#00D1FF]/40 text-left text-xs font-mono text-[#F8FAFC] transition-colors touch-target sm:min-h-0"
               >
                 ASX-9821-4402
                 <span className="block text-[10px] text-[#00D1FF] font-sans">Pro Edition (Online)</span>
@@ -230,7 +230,7 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
               <button
                 type="button"
                 onClick={() => handleInputChange('ASX-4109-8831')}
-                className="p-3 rounded-2xl bg-[#0A0A0A] border border-[#222222] hover:border-[#00D1FF]/40 text-left text-xs font-mono text-[#F5F5F5] transition-colors"
+                className="p-3 rounded-2xl bg-[#090B0E] border border-white/5 hover:border-[#00D1FF]/40 text-left text-xs font-mono text-[#F8FAFC] transition-colors touch-target sm:min-h-0"
               >
                 ASX-4109-8831
                 <span className="block text-[10px] text-emerald-400 font-sans">Sport Edition</span>
@@ -242,11 +242,11 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
           <button
             type="submit"
             disabled={status === 'validating' || status === 'success'}
-            className="w-full mt-2 py-3.5 px-4 rounded-2xl bg-[#00D1FF] hover:bg-[#00B4D8] text-[#0A0A0A] font-semibold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#00D1FF]/20 transition-all disabled:opacity-50"
+            className="w-full mt-2 py-3.5 px-4 rounded-2xl bg-[#00D1FF] hover:bg-[#00B4D8] text-[#090B0E] font-semibold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#00D1FF]/20 active:scale-98 transition-all disabled:opacity-50 touch-target"
           >
             {status === 'validating' ? (
               <>
-                <span className="inline-block w-4 h-4 border-2 border-[#0A0A0A] border-t-transparent rounded-full animate-spin" />
+                <span className="inline-block w-4 h-4 border-2 border-[#090B0E] border-t-transparent rounded-full animate-spin" />
                 <span>Checking bottle...</span>
               </>
             ) : status === 'success' ? (
@@ -264,11 +264,11 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
         </form>
 
         {/* Security / Onboarding Guarantee Footer */}
-        <div className="mt-6 pt-4 border-t border-[#1E1E1E] flex items-center justify-between text-[11px] text-[#555555]">
-          <span className="flex items-center gap-1">
-            <Sparkles className="w-3 h-3 text-[#00D1FF]" /> Verified Firestore Device Registry
+        <div className="mt-5 sm:mt-6 pt-3.5 sm:pt-4 border-t border-white/5 flex items-center justify-between text-[10px] sm:text-[11px] text-neutral-500">
+          <span className="flex items-center gap-1 truncate">
+            <Sparkles className="w-3 h-3 text-[#00D1FF] shrink-0" /> Verified Device Registry
           </span>
-          <span>Encrypted BLE v5.3</span>
+          <span className="shrink-0 font-mono">BLE v5.3</span>
         </div>
       </motion.div>
     </div>

@@ -82,25 +82,25 @@ export const AuthScreen: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center p-4 sm:p-6 select-none relative overflow-hidden text-[#F5F5F5]">
+    <div className="min-h-screen bg-[#090B0E] flex items-center justify-center p-3.5 xs:p-4 sm:p-6 select-none relative overflow-hidden text-[#F8FAFC]">
       {/* Background ambient gradient */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-[#00D1FF]/5 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[450px] sm:w-[500px] h-[450px] sm:h-[500px] bg-[#00D1FF]/5 rounded-full blur-[120px] sm:blur-[140px] pointer-events-none" />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="w-full max-w-md bg-[#141414] border border-[#222222] rounded-[32px] p-6 sm:p-8 shadow-2xl z-10"
+        className="w-full max-w-md bg-[#12161C] border border-white/5 rounded-[28px] sm:rounded-[32px] p-5 xs:p-6 sm:p-8 shadow-2xl z-10 my-auto"
       >
         {/* Brand Header */}
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-[#00D1FF]/10 border border-[#00D1FF]/20 shadow-xl shadow-[#00D1FF]/10 mx-auto mb-4 flex items-center justify-center">
-            <Droplets className="w-7 h-7 text-[#00D1FF]" />
+        <div className="text-center mb-6 sm:mb-8">
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-[#00D1FF]/10 border border-[#00D1FF]/20 shadow-xl shadow-[#00D1FF]/10 mx-auto mb-3 sm:mb-4 flex items-center justify-center">
+            <Droplets className="w-6 h-6 sm:w-7 sm:h-7 text-[#00D1FF]" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white font-sans">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans">
             AquaSense X
           </h1>
-          <p className="text-xs text-[#888888] mt-1">
+          <p className="text-xs text-neutral-400 mt-1">
             {isSignUp ? 'Create your smart hydration account' : 'Sign in to monitor your water quality'}
           </p>
         </div>
@@ -112,7 +112,7 @@ export const AuthScreen: React.FC = () => {
               initial={{ opacity: 0, y: -5 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="mb-5 p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex flex-col gap-2"
+              className="mb-4 sm:mb-5 p-3 sm:p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex flex-col gap-2"
             >
               <div className="flex items-start gap-2">
                 <ShieldCheck className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
@@ -125,7 +125,7 @@ export const AuthScreen: React.FC = () => {
                     setIsSignUp(true);
                     setErrorMsg('');
                   }}
-                  className="self-start mt-0.5 px-3 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/30 rounded-xl text-[11px] font-medium transition-colors"
+                  className="self-start mt-0.5 px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/30 rounded-xl text-[11px] font-medium transition-colors touch-target sm:min-h-0"
                 >
                   Switch to Sign Up
                 </button>
@@ -138,7 +138,7 @@ export const AuthScreen: React.FC = () => {
               initial={{ opacity: 0, y: -5 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="mb-5 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-start gap-2"
+              className="mb-4 sm:mb-5 p-3 sm:p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-start gap-2"
             >
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
               <span>{successMsg}</span>
@@ -147,72 +147,72 @@ export const AuthScreen: React.FC = () => {
         </AnimatePresence>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4">
           {isSignUp && (
             <div>
-              <label className="block text-xs font-medium text-[#888888] mb-1.5">
+              <label className="block text-xs font-medium text-neutral-400 mb-1.5">
                 Full Name
               </label>
               <div className="relative">
-                <UserIcon className="w-4 h-4 text-[#555555] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <UserIcon className="w-4 h-4 text-neutral-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Alex Rivera"
-                  className="w-full bg-[#0A0A0A] border border-[#222222] rounded-2xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-[#555555] focus:outline-none focus:border-[#00D1FF]/50 transition-colors"
+                  className="w-full bg-[#090B0E] border border-white/10 rounded-2xl pl-10 pr-4 py-2.5 sm:py-3 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50 transition-colors"
                 />
               </div>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-medium text-[#888888] mb-1.5">
+            <label className="block text-xs font-medium text-neutral-400 mb-1.5">
               Email Address
             </label>
             <div className="relative">
-              <Mail className="w-4 h-4 text-[#555555] absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <Mail className="w-4 h-4 text-neutral-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@example.com"
-                className="w-full bg-[#0A0A0A] border border-[#222222] rounded-2xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-[#555555] focus:outline-none focus:border-[#00D1FF]/50 transition-colors"
+                className="w-full bg-[#090B0E] border border-white/10 rounded-2xl pl-10 pr-4 py-2.5 sm:py-3 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50 transition-colors"
               />
             </div>
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-medium text-[#888888]">
+              <label className="block text-xs font-medium text-neutral-400">
                 Password
               </label>
               {!isSignUp && (
                 <button
                   type="button"
                   onClick={handleForgotPassword}
-                  className="text-xs text-[#00D1FF] hover:underline"
+                  className="text-xs text-[#00D1FF] hover:underline touch-target sm:min-h-0 sm:min-w-0"
                 >
                   Forgot?
                 </button>
               )}
             </div>
             <div className="relative">
-              <Lock className="w-4 h-4 text-[#555555] absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <Lock className="w-4 h-4 text-neutral-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-[#0A0A0A] border border-[#222222] rounded-2xl pl-10 pr-10 py-2.5 text-sm text-white placeholder-[#555555] focus:outline-none focus:border-[#00D1FF]/50 transition-colors"
+                className="w-full bg-[#090B0E] border border-white/10 rounded-2xl pl-10 pr-10 py-2.5 sm:py-3 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50 transition-colors"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#555555] hover:text-white"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white p-1"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -221,18 +221,18 @@ export const AuthScreen: React.FC = () => {
 
           {isSignUp && (
             <div>
-              <label className="block text-xs font-medium text-[#888888] mb-1.5">
+              <label className="block text-xs font-medium text-neutral-400 mb-1.5">
                 Confirm Password
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-[#555555] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <Lock className="w-4 h-4 text-neutral-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-[#0A0A0A] border border-[#222222] rounded-2xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-[#555555] focus:outline-none focus:border-[#00D1FF]/50 transition-colors"
+                  className="w-full bg-[#090B0E] border border-white/10 rounded-2xl pl-10 pr-4 py-2.5 sm:py-3 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50 transition-colors"
                 />
               </div>
             </div>
@@ -242,10 +242,10 @@ export const AuthScreen: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-2 py-3.5 px-4 rounded-2xl bg-[#00D1FF] hover:bg-[#00B4D8] text-[#0A0A0A] font-semibold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#00D1FF]/20 transition-all disabled:opacity-50"
+            className="w-full mt-2 py-3.5 px-4 rounded-2xl bg-[#00D1FF] hover:bg-[#00B4D8] text-[#090B0E] font-semibold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#00D1FF]/20 active:scale-98 transition-all disabled:opacity-50 touch-target"
           >
             {loading ? (
-              <span className="inline-block w-4 h-4 border-2 border-[#0A0A0A] border-t-transparent rounded-full animate-spin" />
+              <span className="inline-block w-4 h-4 border-2 border-[#090B0E] border-t-transparent rounded-full animate-spin" />
             ) : (
               <>
                 <span>{isSignUp ? 'Create Account' : 'Sign In'}</span>
@@ -256,10 +256,10 @@ export const AuthScreen: React.FC = () => {
         </form>
 
         {/* Divider */}
-        <div className="my-6 flex items-center gap-3">
-          <div className="flex-1 h-px bg-[#222222]" />
-          <span className="text-[11px] text-[#555555] uppercase tracking-wider">or</span>
-          <div className="flex-1 h-px bg-[#222222]" />
+        <div className="my-5 sm:my-6 flex items-center gap-3">
+          <div className="flex-1 h-px bg-white/5" />
+          <span className="text-[11px] text-neutral-500 uppercase tracking-wider">or</span>
+          <div className="flex-1 h-px bg-white/5" />
         </div>
 
         {/* Google Sign-In */}
@@ -267,7 +267,7 @@ export const AuthScreen: React.FC = () => {
           type="button"
           onClick={handleGoogleAuth}
           disabled={loading}
-          className="w-full py-3 px-4 rounded-2xl bg-[#0A0A0A] border border-[#222222] hover:bg-[#1E1E1E] text-[#F5F5F5] text-xs font-medium flex items-center justify-center gap-2.5 transition-colors"
+          className="w-full py-3 px-4 rounded-2xl bg-[#090B0E] border border-white/10 hover:bg-white/[0.04] text-[#F8FAFC] text-xs font-medium flex items-center justify-center gap-2.5 transition-colors touch-target"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24">
             <path
@@ -291,7 +291,7 @@ export const AuthScreen: React.FC = () => {
         </button>
 
         {/* Toggle sign up / sign in */}
-        <div className="mt-6 text-center text-xs text-[#888888]">
+        <div className="mt-5 sm:mt-6 text-center text-xs text-neutral-400">
           {isSignUp ? 'Already have an account?' : "Don't have an account yet?"}{' '}
           <button
             type="button"
@@ -300,7 +300,7 @@ export const AuthScreen: React.FC = () => {
               setErrorMsg('');
               setSuccessMsg('');
             }}
-            className="text-[#00D1FF] font-medium hover:underline ml-1"
+            className="text-[#00D1FF] font-medium hover:underline ml-1 touch-target sm:min-h-0 sm:min-w-0"
           >
             {isSignUp ? 'Sign In' : 'Sign Up'}
           </button>

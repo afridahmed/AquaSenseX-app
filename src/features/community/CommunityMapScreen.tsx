@@ -272,56 +272,57 @@ export const CommunityMapScreen: React.FC = () => {
   };
 
   return (
-    <div className="min-h-full bg-[#0A0A0A] text-[#F5F5F5] flex flex-col">
+    <div className="min-h-full bg-[#090B0E] text-[#F8FAFC] flex flex-col transition-colors duration-200">
       <Header
         title="Community Water Map"
+        mobileTitle="Water Map"
         subtitle="Live crowdsourced water testing reported by AquaSense X users"
       />
 
-      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full flex-1 flex flex-col space-y-6">
+      <div className="p-3.5 xs:p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full flex-1 flex flex-col space-y-4 sm:space-y-6">
         {/* Top Controls Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4">
           {/* Search bar */}
           <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 text-[#888888] absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search fountain, park, or hydration station..."
-              className="w-full bg-[#141414] border border-[#222222] rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-[#555555] focus:outline-none focus:border-[#00D1FF]/50"
+              placeholder="Search fountain, park, or station..."
+              className="w-full bg-[#12161C] border border-white/10 rounded-2xl pl-10 pr-4 py-2.5 text-xs sm:text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50"
             />
           </div>
 
           {/* Quality Filter Pills & Add Button */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-            <div className="flex items-center bg-[#141414] border border-[#222222] rounded-2xl p-1 text-xs font-medium">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+            <div className="flex items-center bg-[#12161C] border border-white/5 rounded-2xl p-1 text-xs font-medium shrink-0">
               <button
                 onClick={() => setFilterQuality('all')}
-                className={`px-3 py-1.5 rounded-xl transition-all ${
+                className={`px-3 py-1.5 rounded-xl transition-all touch-target sm:min-h-0 sm:min-w-0 ${
                   filterQuality === 'all'
-                    ? 'bg-[#1E1E1E] text-white shadow-sm border border-white/10'
-                    : 'text-[#888888] hover:text-white'
+                    ? 'bg-white/[0.08] text-white shadow-sm border border-white/10'
+                    : 'text-neutral-400 hover:text-white'
                 }`}
               >
                 All ({reports.length})
               </button>
               <button
                 onClick={() => setFilterQuality('excellent')}
-                className={`px-3 py-1.5 rounded-xl transition-all ${
+                className={`px-3 py-1.5 rounded-xl transition-all touch-target sm:min-h-0 sm:min-w-0 ${
                   filterQuality === 'excellent'
                     ? 'bg-[#00D1FF]/15 text-[#00D1FF] border border-[#00D1FF]/30 shadow-sm'
-                    : 'text-[#888888] hover:text-white'
+                    : 'text-neutral-400 hover:text-white'
                 }`}
               >
                 Pure (≥88)
               </button>
               <button
                 onClick={() => setFilterQuality('caution')}
-                className={`px-3 py-1.5 rounded-xl transition-all ${
+                className={`px-3 py-1.5 rounded-xl transition-all touch-target sm:min-h-0 sm:min-w-0 ${
                   filterQuality === 'caution'
                     ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-sm'
-                    : 'text-[#888888] hover:text-white'
+                    : 'text-neutral-400 hover:text-white'
                 }`}
               >
                 Caution (&lt;88)
@@ -330,20 +331,20 @@ export const CommunityMapScreen: React.FC = () => {
 
             <button
               onClick={() => setIsSubmitModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-[#00D1FF] hover:bg-[#00B4D8] text-[#0A0A0A] text-xs font-semibold shrink-0 shadow-lg shadow-[#00D1FF]/20 transition-all"
+              className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2.5 rounded-2xl bg-[#00D1FF] hover:bg-[#00B4D8] text-[#090B0E] text-xs font-semibold shrink-0 shadow-lg shadow-[#00D1FF]/20 active:scale-95 transition-all touch-target sm:min-h-0 sm:min-w-0"
             >
               <Plus className="w-4 h-4" />
-              <span>Report Water Source</span>
+              <span>Report Source</span>
             </button>
           </div>
         </div>
 
         {/* Interactive Map Canvas and Side Sheet Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 items-start">
-          {/* Map Canvas (7 cols) */}
-          <div className="lg:col-span-7 bg-[#141414] border border-[#222222] rounded-[32px] p-4 overflow-hidden relative min-h-[420px] lg:min-h-[560px] flex flex-col justify-between shadow-2xl">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 flex-1 items-start">
+          {/* Map Canvas (7 cols on lg) */}
+          <div className="lg:col-span-7 bg-[#12161C] border border-white/5 rounded-[28px] sm:rounded-[32px] p-3.5 sm:p-4 overflow-hidden relative min-h-[320px] xs:min-h-[380px] sm:min-h-[440px] lg:min-h-[560px] flex flex-col justify-between shadow-2xl">
             {/* High-End Dark Map Vector Canvas */}
-            <div className="absolute inset-0 bg-[#0A0A0A] overflow-hidden">
+            <div className="absolute inset-0 bg-[#090B0E] overflow-hidden">
               <svg className="w-full h-full opacity-30 pointer-events-none" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                   <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
@@ -359,18 +360,18 @@ export const CommunityMapScreen: React.FC = () => {
 
             {/* Top Map Status Overlay */}
             <div className="relative z-10 flex items-center justify-between pointer-events-none">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#141414]/90 border border-[#222222] backdrop-blur-md text-xs text-[#F5F5F5]">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#12161C]/90 border border-white/10 backdrop-blur-md text-[11px] sm:text-xs text-white">
                 <Navigation className="w-3.5 h-3.5 text-[#00D1FF]" />
-                <span>San Francisco Bay Metro Network</span>
+                <span className="truncate max-w-[180px] sm:max-w-none">SF Bay Metro Network</span>
               </div>
-              <div className="px-3 py-1 rounded-full bg-[#141414]/90 border border-[#222222] text-[10px] text-[#888888] font-mono">
-                {filteredReports.length} Sources Mapped
+              <div className="px-2.5 py-1 rounded-full bg-[#12161C]/90 border border-white/10 text-[10px] text-neutral-400 font-mono">
+                {filteredReports.length} Mapped
               </div>
             </div>
 
             {/* Interactive Map Pins on Canvas */}
-            <div className="relative z-10 flex-1 flex items-center justify-center p-8">
-              <div className="relative w-full max-w-lg h-72 sm:h-96">
+            <div className="relative z-10 flex-1 flex items-center justify-center p-4 sm:p-8">
+              <div className="relative w-full max-w-lg h-56 xs:h-64 sm:h-80 md:h-96">
                 {filteredReports.map((rep, idx) => {
                   const isSelected = selectedReport?.id === rep.id;
                   const scoreStyles = getScoreColor(rep.qualityScore);
@@ -393,14 +394,14 @@ export const CommunityMapScreen: React.FC = () => {
                       onClick={() => setSelectedReport(rep)}
                     >
                       <div
-                        className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-2xl shadow-xl border backdrop-blur-md transition-all ${
+                        className={`relative flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-2xl shadow-xl border backdrop-blur-md transition-all ${
                           isSelected
                             ? 'bg-[#181818] ring-2 ring-[#00D1FF] border-[#00D1FF]/50 scale-110'
-                            : 'bg-[#141414]/90 border-[#222222] hover:border-white/40'
+                            : 'bg-[#12161C]/95 border-white/10 hover:border-white/40'
                         }`}
                       >
-                        <span className={`w-2.5 h-2.5 rounded-full ${scoreStyles.bg} animate-pulse`} />
-                        <span className="text-xs font-bold text-[#F5F5F5] font-sans">
+                        <span className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full ${scoreStyles.bg} animate-pulse`} />
+                        <span className="text-[11px] sm:text-xs font-bold text-white font-sans">
                           {rep.qualityScore}
                         </span>
                       </div>
@@ -411,81 +412,81 @@ export const CommunityMapScreen: React.FC = () => {
             </div>
 
             {/* Map Legend */}
-            <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 p-3.5 rounded-2xl bg-[#141414]/90 border border-[#222222] backdrop-blur-md text-[11px] text-[#888888]">
-              <div className="flex items-center gap-4">
+            <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 p-2.5 sm:p-3.5 rounded-2xl bg-[#12161C]/90 border border-white/10 backdrop-blur-md text-[10px] sm:text-[11px] text-neutral-400">
+              <div className="flex flex-wrap items-center gap-2.5 sm:gap-4">
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#00D1FF]" /> Excellent (88–100)
+                  <span className="w-2 h-2 rounded-full bg-[#00D1FF]" /> Pure (88–100)
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" /> Acceptable (70–87)
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" /> Normal (70–87)
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400" /> Caution (&lt;70)
+                  <span className="w-2 h-2 rounded-full bg-amber-400" /> Caution (&lt;70)
                 </span>
               </div>
-              <span className="text-[10px] text-[#555555] font-mono">
-                Click pin to inspect
+              <span className="text-[10px] text-neutral-500 font-mono hidden xs:inline">
+                Tap pin to inspect
               </span>
             </div>
           </div>
 
-          {/* Selected Water Source Details Card & List (5 cols) */}
+          {/* Selected Water Source Details Card & List (5 cols on lg) */}
           <div className="lg:col-span-5 space-y-4">
             {selectedReport ? (
               <motion.div
                 key={selectedReport.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="p-6 rounded-[32px] bg-[#141414] border border-[#222222] shadow-2xl space-y-4"
+                className="p-4 xs:p-5 sm:p-6 rounded-[28px] sm:rounded-[32px] bg-[#12161C] border border-white/5 shadow-2xl space-y-3.5 sm:space-y-4"
               >
                 {/* Header */}
-                <div className="flex items-start justify-between gap-3 pb-3.5 border-b border-[#1E1E1E]">
-                  <div>
+                <div className="flex items-start justify-between gap-3 pb-3 sm:pb-3.5 border-b border-white/5">
+                  <div className="min-w-0">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-[#00D1FF] block mb-1">
                       Selected Water Source
                     </span>
-                    <h3 className="text-base font-semibold text-white leading-tight">
+                    <h3 className="text-sm sm:text-base font-semibold text-white leading-tight truncate">
                       {selectedReport.sourceName}
                     </h3>
-                    <div className="flex items-center gap-2 mt-1 text-xs text-[#888888]">
+                    <div className="flex items-center gap-2 mt-1 text-[11px] sm:text-xs text-neutral-400">
                       <Clock className="w-3.5 h-3.5" />
-                      <span>Tested {selectedReport.lastTestedAt}</span>
+                      <span>{selectedReport.lastTestedAt}</span>
                       <span>•</span>
-                      <span>By {selectedReport.authorName}</span>
+                      <span className="truncate">By {selectedReport.authorName}</span>
                     </div>
                   </div>
 
                   <div className="text-right shrink-0">
-                    <span className="text-3xl font-light text-[#F5F5F5] font-sans">
+                    <span className="text-2xl sm:text-3xl font-light text-white font-sans">
                       {selectedReport.qualityScore}
                     </span>
-                    <span className="text-xs text-[#888888] block">Score</span>
+                    <span className="text-[10px] sm:text-xs text-neutral-400 block">Score</span>
                   </div>
                 </div>
 
                 {/* Sensor telemetry snapshot */}
-                <div className="grid grid-cols-4 gap-2 text-center text-xs p-3.5 rounded-2xl bg-[#0A0A0A] border border-[#222222]">
+                <div className="grid grid-cols-4 gap-2 text-center text-xs p-3 rounded-2xl bg-[#090B0E] border border-white/5">
                   <div>
-                    <span className="text-[10px] text-[#555555] block">pH</span>
+                    <span className="text-[9px] text-neutral-500 block">pH</span>
                     <span className="font-semibold text-white">{selectedReport.ph}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-[#555555] block">TDS</span>
+                    <span className="text-[9px] text-neutral-500 block">TDS</span>
                     <span className="font-semibold text-white">{selectedReport.tds} ppm</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-[#555555] block">CLARITY</span>
+                    <span className="text-[9px] text-neutral-500 block">CLARITY</span>
                     <span className="font-semibold text-white">{selectedReport.turbidity} NTU</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-[#555555] block">TEMP</span>
+                    <span className="text-[9px] text-neutral-500 block">TEMP</span>
                     <span className="font-semibold text-white">{selectedReport.temperature}°C</span>
                   </div>
                 </div>
 
                 {/* Tester notes */}
                 {selectedReport.notes && (
-                  <p className="text-xs text-neutral-300 leading-relaxed bg-[#0A0A0A] p-3.5 rounded-2xl border border-[#222222]">
+                  <p className="text-xs text-neutral-300 leading-relaxed bg-[#090B0E] p-3 rounded-2xl border border-white/5">
                     "{selectedReport.notes}"
                   </p>
                 )}
@@ -494,10 +495,10 @@ export const CommunityMapScreen: React.FC = () => {
                 <div className="flex items-center justify-between gap-3 pt-1">
                   <button
                     onClick={() => handleVerifyReport(selectedReport.id)}
-                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-xs font-semibold transition-all border ${
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-4 rounded-2xl text-xs font-semibold transition-all border touch-target sm:min-h-0 sm:min-w-0 ${
                       selectedReport.userHasVerified
                         ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                        : 'bg-[#1E1E1E] hover:bg-[#252525] text-white border-white/5 hover:border-[#00D1FF]/30'
+                        : 'bg-white/[0.04] hover:bg-white/[0.08] text-white border-white/10 hover:border-[#00D1FF]/30'
                     }`}
                   >
                     <ThumbsUp className="w-4 h-4" />
@@ -509,40 +510,40 @@ export const CommunityMapScreen: React.FC = () => {
                 </div>
 
                 {/* Freshness Disclaimer */}
-                <div className="pt-2 border-t border-[#1E1E1E] text-[11px] text-[#555555] flex items-center gap-1.5">
+                <div className="pt-2 border-t border-white/5 text-[10px] sm:text-[11px] text-neutral-500 flex items-center gap-1.5">
                   <Info className="w-3.5 h-3.5 shrink-0 text-[#00D1FF]" />
-                  <span>Community water reports reflect conditions at test time. Always check live readings before consuming.</span>
+                  <span className="truncate">Check live readings before drinking from unverified taps.</span>
                 </div>
               </motion.div>
             ) : (
-              <div className="p-8 rounded-[32px] bg-[#141414] border border-[#222222] text-center text-[#888888] text-xs">
+              <div className="p-6 sm:p-8 rounded-[28px] sm:rounded-[32px] bg-[#12161C] border border-white/5 text-center text-neutral-400 text-xs">
                 Select a water source on the map to view detailed chemical purity and verification history.
               </div>
             )}
 
             {/* Recent reports list */}
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-              <span className="text-xs font-semibold uppercase tracking-wider text-[#888888] block px-1">
+              <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-neutral-400 block px-1">
                 Nearby Station Feed
               </span>
               {filteredReports.map((rep) => (
                 <div
                   key={rep.id}
                   onClick={() => setSelectedReport(rep)}
-                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                  className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between touch-target sm:min-h-0 ${
                     selectedReport?.id === rep.id
                       ? 'bg-[#181818] border-[#00D1FF]/50 shadow-md'
-                      : 'bg-[#141414] border-[#222222] hover:bg-[#1A1A1A] hover:border-white/20'
+                      : 'bg-[#12161C] border-white/5 hover:bg-white/[0.04] hover:border-white/10'
                   }`}
                 >
                   <div className="min-w-0 flex-1 pr-2">
                     <p className="text-xs font-medium text-white truncate">{rep.sourceName}</p>
-                    <p className="text-[10px] text-[#888888] truncate">
+                    <p className="text-[10px] text-neutral-400 truncate">
                       {rep.lastTestedAt} • {rep.verifiedReports} verifications
                     </p>
                   </div>
                   <span
-                    className={`text-xs font-semibold px-2.5 py-0.5 rounded-lg font-sans ${
+                    className={`text-xs font-semibold px-2.5 py-0.5 rounded-lg font-sans shrink-0 ${
                       getScoreColor(rep.qualityScore).text
                     }`}
                   >
@@ -555,26 +556,26 @@ export const CommunityMapScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* Submit Water Report Modal */}
+      {/* Submit Water Report Modal / Responsive Bottom Sheet */}
       <AnimatePresence>
         {isSubmitModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-lg bg-[#141414] border border-[#222222] rounded-[32px] p-6 sm:p-7 shadow-2xl relative"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="w-full sm:max-w-lg bg-[#12161C] border-t sm:border border-white/10 rounded-t-[28px] sm:rounded-[32px] p-5 sm:p-7 shadow-2xl relative max-h-[90vh] overflow-y-auto safe-area-pb"
             >
-              <div className="flex items-center justify-between pb-4 border-b border-[#1E1E1E]">
+              <div className="flex items-center justify-between pb-3.5 border-b border-white/10">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-xl bg-[#00D1FF]/10 border border-[#00D1FF]/20 flex items-center justify-center">
                     <MapPin className="w-4 h-4 text-[#00D1FF]" />
                   </div>
-                  <h3 className="text-base font-semibold text-white">Publish Community Water Report</h3>
+                  <h3 className="text-sm sm:text-base font-semibold text-white">Publish Community Report</h3>
                 </div>
                 <button
                   onClick={() => setIsSubmitModalOpen(false)}
-                  className="p-1.5 rounded-xl text-[#888888] hover:text-white hover:bg-[#1E1E1E]"
+                  className="p-1.5 rounded-xl text-neutral-400 hover:text-white hover:bg-white/5"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -582,25 +583,25 @@ export const CommunityMapScreen: React.FC = () => {
 
               <form onSubmit={handleSubmitReport} className="mt-4 space-y-4">
                 {/* Live readings snapshot */}
-                <div className="p-4 rounded-2xl bg-[#0A0A0A] border border-[#222222]">
+                <div className="p-3.5 rounded-2xl bg-[#090B0E] border border-white/5">
                   <span className="text-[10px] uppercase font-semibold text-[#00D1FF] block mb-2">
                     AquaSense X Telemetry to be attached:
                   </span>
                   <div className="grid grid-cols-4 gap-2 text-center text-xs">
                     <div>
-                      <span className="text-[#555555] block text-[10px]">SCORE</span>
+                      <span className="text-neutral-500 block text-[9px]">SCORE</span>
                       <span className="font-semibold text-[#00D1FF]">{qualityEval.score}/100</span>
                     </div>
                     <div>
-                      <span className="text-[#555555] block text-[10px]">pH</span>
+                      <span className="text-neutral-500 block text-[9px]">pH</span>
                       <span className="font-semibold text-white">{bottle?.ph}</span>
                     </div>
                     <div>
-                      <span className="text-[#555555] block text-[10px]">TDS</span>
+                      <span className="text-neutral-500 block text-[9px]">TDS</span>
                       <span className="font-semibold text-white">{bottle?.tds} ppm</span>
                     </div>
                     <div>
-                      <span className="text-[#555555] block text-[10px]">TURBIDITY</span>
+                      <span className="text-neutral-500 block text-[9px]">TURBIDITY</span>
                       <span className="font-semibold text-white">{bottle?.turbidity} NTU</span>
                     </div>
                   </div>
@@ -616,7 +617,7 @@ export const CommunityMapScreen: React.FC = () => {
                     value={newSourceName}
                     onChange={(e) => setNewSourceName(e.target.value)}
                     placeholder="e.g. Golden Gate Park Fountain #4"
-                    className="w-full bg-[#0A0A0A] border border-[#222222] rounded-2xl px-4 py-2.5 text-sm text-white placeholder-[#555555] focus:outline-none focus:border-[#00D1FF]/50"
+                    className="w-full bg-[#090B0E] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50"
                   />
                 </div>
 
@@ -627,7 +628,7 @@ export const CommunityMapScreen: React.FC = () => {
                   <select
                     value={newSourceType}
                     onChange={(e) => setNewSourceType(e.target.value as any)}
-                    className="w-full bg-[#0A0A0A] border border-[#222222] rounded-2xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#00D1FF]/50"
+                    className="w-full bg-[#090B0E] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-[#00D1FF]/50"
                   >
                     <option value="fountain">Public Drinking Fountain</option>
                     <option value="filtration_station">Bottle Refill & Filtration Station</option>
@@ -646,21 +647,21 @@ export const CommunityMapScreen: React.FC = () => {
                     value={newNotes}
                     onChange={(e) => setNewNotes(e.target.value)}
                     placeholder="e.g. Excellent cold stream, filter status light green, high pressure."
-                    className="w-full bg-[#0A0A0A] border border-[#222222] rounded-2xl px-4 py-2.5 text-xs text-white placeholder-[#555555] focus:outline-none focus:border-[#00D1FF]/50 resize-none"
+                    className="w-full bg-[#090B0E] border border-white/10 rounded-xl px-3 py-2 text-xs sm:text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50 resize-none"
                   />
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-2">
+                <div className="flex items-center justify-end gap-2 pt-2">
                   <button
                     type="button"
                     onClick={() => setIsSubmitModalOpen(false)}
-                    className="px-4 py-2 text-xs font-medium text-[#888888] hover:text-white"
+                    className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-medium text-neutral-300 hover:text-white bg-white/[0.04]"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 rounded-xl bg-[#00D1FF] hover:bg-[#00B4D8] text-[#0A0A0A] font-semibold text-xs transition-colors"
+                    className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-[#00D1FF] hover:bg-[#00B4D8] text-[#090B0E] font-semibold text-xs transition-colors"
                   >
                     Publish Report
                   </button>

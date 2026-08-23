@@ -17,14 +17,13 @@ export const WaterStatusCircle: React.FC<WaterStatusCircleProps> = ({ evaluation
   const center = size / 2;
   const radius = center - strokeWidth - 8;
   const circumference = 2 * Math.PI * radius;
-  // Use a 270-degree arc for Tesla-like instrument cluster style
   const strokeDashoffset = circumference - (score / 100) * circumference;
 
   // Category Icon
   const renderCategoryIcon = () => {
-    if (score >= 70) return <ShieldCheck className="w-4 h-4 text-cyan-400" />;
-    if (score >= 50) return <AlertTriangle className="w-4 h-4 text-amber-400" />;
-    return <AlertCircle className="w-4 h-4 text-rose-400" />;
+    if (score >= 70) return <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 shrink-0" />;
+    if (score >= 50) return <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 shrink-0" />;
+    return <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-400 shrink-0" />;
   };
 
   // Color stroke gradient
@@ -36,23 +35,23 @@ export const WaterStatusCircle: React.FC<WaterStatusCircleProps> = ({ evaluation
   };
 
   return (
-    <div className="flex flex-col items-center justify-center p-6 rounded-[32px] bg-[#141414] border border-[#222222] relative overflow-hidden shadow-2xl transition-all">
+    <div className="flex flex-col items-center justify-between p-4 xs:p-5 sm:p-6 lg:p-7 rounded-[28px] sm:rounded-[32px] bg-[#12161C] border border-white/5 relative overflow-hidden shadow-2xl transition-all h-full">
       {/* Subtle background radiant glow */}
       <div
-        className="absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full blur-3xl opacity-20 pointer-events-none transition-colors duration-700"
+        className="absolute -top-24 left-1/2 -translate-x-1/2 w-48 sm:w-64 h-48 sm:h-64 rounded-full blur-3xl opacity-20 pointer-events-none transition-colors duration-700"
         style={{ backgroundColor: getStrokeColor() }}
       />
 
-      {/* Top Status Header */}
-      <div className="flex items-center gap-2 mb-3 z-10">
-        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border ${badgeBg} ${badgeText}`}>
+      {/* Top Status Header Badge */}
+      <div className="flex items-center gap-2 mb-2 sm:mb-3 z-10">
+        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold uppercase tracking-wider border ${badgeBg} ${badgeText}`}>
           {renderCategoryIcon()}
-          {headline}
+          <span>{headline}</span>
         </span>
       </div>
 
-      {/* Circular Instrument Gauge */}
-      <div className="relative w-[240px] h-[240px] flex items-center justify-center my-2">
+      {/* Circular Instrument Gauge - Responsive Diameter */}
+      <div className="relative w-[180px] h-[180px] xs:w-[200px] xs:h-[200px] sm:w-[230px] sm:h-[230px] md:w-[240px] md:h-[240px] flex items-center justify-center my-1 sm:my-2">
         <svg className="w-full h-full -rotate-90 transform" viewBox={`0 0 ${size} ${size}`}>
           {/* Background track */}
           <circle
@@ -62,7 +61,7 @@ export const WaterStatusCircle: React.FC<WaterStatusCircleProps> = ({ evaluation
             stroke="currentColor"
             strokeWidth={strokeWidth}
             fill="transparent"
-            className="text-[#1E1E1E]"
+            className="text-white/5"
           />
 
           {/* Animated score arc */}
@@ -81,10 +80,10 @@ export const WaterStatusCircle: React.FC<WaterStatusCircleProps> = ({ evaluation
           />
         </svg>
 
-        {/* Inner Content - Clean Typographic Cluster */}
+        {/* Inner Content - Typographic Cluster */}
         <div className="absolute flex flex-col items-center justify-center text-center select-none pointer-events-none">
-          <span className="text-xs uppercase tracking-widest text-[#888888] font-medium mb-0.5">
-            Water Purity
+          <span className="text-[10px] sm:text-xs uppercase tracking-widest text-neutral-400 font-medium mb-0.5">
+            Purity Score
           </span>
 
           <motion.div
@@ -94,28 +93,29 @@ export const WaterStatusCircle: React.FC<WaterStatusCircleProps> = ({ evaluation
             transition={{ duration: 0.4 }}
             className="flex items-baseline justify-center"
           >
-            <span className="text-6xl font-light tracking-tighter text-[#F5F5F5] font-sans">
+            <span className="text-4xl xs:text-5xl sm:text-6xl font-light tracking-tighter text-white font-sans">
               {score}
             </span>
-            <span className="text-lg font-light text-[#888888] ml-1">/100</span>
+            <span className="text-sm sm:text-base font-light text-neutral-500 ml-1">/100</span>
           </motion.div>
 
-          <span className={`text-sm font-semibold tracking-wide mt-1 ${colorClass}`}>
+          <span className={`text-xs sm:text-sm font-semibold tracking-wide mt-0.5 sm:mt-1 ${colorClass}`}>
             {category}
           </span>
         </div>
       </div>
 
       {/* Description */}
-      <p className="text-xs text-center text-[#888888] max-w-xs mt-1 leading-relaxed z-10">
+      <p className="text-[11px] sm:text-xs text-center text-neutral-400 max-w-xs sm:max-w-sm mt-1 leading-relaxed z-10 px-1">
         {evaluation.description}
       </p>
 
       {/* Safety Notice Footer */}
-      <div className="mt-4 pt-3 border-t border-[#1E1E1E] w-full flex items-center justify-center gap-1.5 text-[11px] text-[#555555]">
+      <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-white/5 w-full flex items-center justify-center gap-1.5 text-[10px] sm:text-[11px] text-neutral-500">
         <Sparkles className="w-3.5 h-3.5 text-[#00D1FF]/70 shrink-0" />
-        <span className="line-clamp-1">Multi-spectral optical & electrochemical screening</span>
+        <span className="truncate">Multi-spectral optical & electrochemical screening</span>
       </div>
     </div>
   );
 };
+
