@@ -3,10 +3,10 @@ import { CommunityReport } from '../../types';
 import { useBottle } from '../../context/BottleContext';
 import { useAuth } from '../../context/AuthContext';
 import { Header } from '../../components/common/Header';
-import { LeafletCommunityMap } from '../../components/common/LeafletCommunityMap';
+import { LeafletCommunityMap, ExplorationLocation } from '../../components/common/LeafletCommunityMap';
+import { UnknownSourceTestModal } from '../dashboard/UnknownSourceTestModal';
 import { geocodingService, GeocodingResult } from '../../services/geocoding/geocodingService';
 import {
-  createCommunityReport,
   toggleReportVerification,
   formatRelativeTime,
 } from '../../services/community/communityService';
@@ -30,13 +30,13 @@ import {
   AlertTriangle,
   Compass,
   CheckCircle2,
-  Filter,
-  Sparkles,
   Droplets,
+  Share2,
+  ExternalLink,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-// Production starter community dataset with valid coordinates
+// Starter community dataset with verified coordinates
 const INITIAL_REPORTS: CommunityReport[] = [
   {
     id: 'rep_1',
@@ -147,21 +147,26 @@ interface CommunityMapScreenProps {
 export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
   initialSelectedReportId,
 }) => {
-  const { bottle, qualityEval } = useBottle();
   const { user } = useAuth();
 
   const [reports, setReports] = useState<CommunityReport[]>(INITIAL_REPORTS);
   const [selectedReport, setSelectedReport] = useState<CommunityReport | null>(INITIAL_REPORTS[0]);
   const [filterQuality, setFilterQuality] = useState<'all' | 'excellent' | 'caution'>('all');
 
-  // Search & Geocoding state
+  // Mobile Bottom Sheet state for selected source
+  const [isMobileSheetOpen, setIsMobileSheetOpen] = useState<boolean>(false);
+
+  // Search & Geocoding exploration state
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchResults, setSearchResults] = useState<GeocodingResult[]>([]);
   const [isSearchingLocation, setIsSearchingLocation] = useState<boolean>(false);
   const [showSearchDropdown, setShowSearchDropdown] = useState<boolean>(false);
   const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  // User Geolocation state
+  // Exploration Center (from search or manual map click)
+  const [exploreLocation, setExploreLocation] = useState<ExplorationLocation | null>(null);
+
+  // User Device GPS state (strict real-device location)
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [locState, setLocState] = useState<{
     status: 'idle' | 'acquiring' | 'success' | 'error';
@@ -171,12 +176,8 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
     errorMessage: '',
   });
 
-  // Modal for manual reporting from map
-  const [isSubmitModalOpen, setIsSubmitModalOpen] = useState<boolean>(false);
-  const [newSourceName, setNewSourceName] = useState<string>('');
-  const [newNotes, setNewNotes] = useState<string>('');
-  const [newSourceType, setNewSourceType] = useState<CommunityReport['sourceType']>('fountain');
-  const [isSubmittingReport, setIsSubmittingReport] = useState<boolean>(false);
+  // Test & Report Water Modal from Community Screen (uses exact unified modal)
+  const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
 
   // Real-time Firestore sync
   useEffect(() => {
@@ -201,7 +202,7 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
               };
             });
 
-            // Merge with initial reports to ensure rich map density
+            // Merge with initial reports to ensure rich map coverage
             const existingIds = new Set(list.map((r) => r.id));
             const merged = [
               ...list,
@@ -210,10 +211,13 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
 
             setReports(merged);
 
-            // If initialSelectedReportId was passed, set that
+            // Handle initial deep-link selection
             if (initialSelectedReportId) {
               const matched = merged.find((r) => r.id === initialSelectedReportId);
-              if (matched) setSelectedReport(matched);
+              if (matched) {
+                setSelectedReport(matched);
+                setIsMobileSheetOpen(true);
+              }
             } else if (!selectedReport && merged.length > 0) {
               setSelectedReport(merged[0]);
             }
@@ -230,7 +234,7 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
     }
   }, [user?.uid, initialSelectedReportId]);
 
-  // Handler: Use My Location
+  // Handler: Use My Location for map exploration
   const handleUseMyLocation = () => {
     if (!navigator.geolocation) {
       setLocState({
@@ -247,6 +251,8 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
         const lat = pos.coords.latitude;
         const lon = pos.coords.longitude;
         setUserLocation({ lat, lon });
+        // Clear manual exploration pin so map centers on real user location
+        setExploreLocation(null);
         setLocState({ status: 'success', errorMessage: '' });
       },
       (err) => {
@@ -292,20 +298,62 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
     }, 400);
   };
 
+  // Select location from search autocomplete
   const handleSelectSearchResult = (result: GeocodingResult) => {
-    setUserLocation({ lat: result.lat, lon: result.lon });
-    setSearchQuery(result.name || result.displayName.split(',')[0]);
+    const label = result.name || result.displayName.split(',')[0];
+    setExploreLocation({
+      lat: result.lat,
+      lon: result.lon,
+      label,
+      source: 'search',
+    });
+    setSearchQuery(label);
     setShowSearchDropdown(false);
   };
 
-  // Compute distance for each report if user location is active
+  // Manual Map Click/Tap handler for geographical exploration
+  const handleMapClick = async (lat: number, lon: number) => {
+    // Set immediate coordinate pin
+    setExploreLocation({
+      lat,
+      lon,
+      label: 'Exploring Area',
+      source: 'map_click',
+    });
+
+    // Reverse geocode to get a human-readable neighborhood/place title
+    try {
+      const placeName = await geocodingService.reverseGeocode(lat, lon);
+      setExploreLocation({
+        lat,
+        lon,
+        label: placeName.split(',')[0] || 'Selected Map Point',
+        source: 'map_click',
+      });
+    } catch {
+      // Keep coordinate label
+    }
+  };
+
+  // Active Exploration Center (Prioritize active search/click explore pin, then real user GPS)
+  const activeCenter = useMemo(() => {
+    if (exploreLocation) {
+      return { lat: exploreLocation.lat, lon: exploreLocation.lon, label: exploreLocation.label };
+    }
+    if (userLocation) {
+      return { lat: userLocation.lat, lon: userLocation.lon, label: 'Your GPS Location' };
+    }
+    return null;
+  }, [exploreLocation, userLocation]);
+
+  // Compute distance for each report from active exploration center
   const reportsWithDistance = useMemo(() => {
     return reports.map((rep) => {
       let distanceKm: number | undefined = undefined;
-      if (userLocation) {
+      if (activeCenter) {
         distanceKm = geocodingService.calculateDistanceKm(
-          userLocation.lat,
-          userLocation.lon,
+          activeCenter.lat,
+          activeCenter.lon,
           rep.latitude,
           rep.longitude
         );
@@ -315,24 +363,25 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
         distanceKm,
       };
     });
-  }, [reports, userLocation]);
+  }, [reports, activeCenter]);
 
-  // Filtered & Sorted reports
+  // Filtered & Sorted reports feed
   const filteredReports = useMemo(() => {
     return reportsWithDistance
       .filter((rep) => {
         const matchesSearch =
+          searchQuery.length < 2 ||
           rep.sourceName.toLowerCase().includes(searchQuery.toLowerCase()) ||
           (rep.notes && rep.notes.toLowerCase().includes(searchQuery.toLowerCase())) ||
           (rep.sourceType && rep.sourceType.toLowerCase().includes(searchQuery.toLowerCase()));
 
-        if (!matchesSearch && searchQuery.length > 1 && searchResults.length === 0) return false;
+        if (!matchesSearch && searchQuery.length >= 2 && searchResults.length === 0) return false;
         if (filterQuality === 'excellent') return rep.qualityScore >= 88;
         if (filterQuality === 'caution') return rep.qualityScore < 88;
         return true;
       })
       .sort((a, b) => {
-        // If distance is available, sort primarily by proximity
+        // If distance from active exploration center is available, sort primarily by proximity
         if (a.distanceKm !== undefined && b.distanceKm !== undefined) {
           return a.distanceKm - b.distanceKm;
         }
@@ -340,7 +389,13 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
       });
   }, [reportsWithDistance, searchQuery, filterQuality, searchResults.length]);
 
-  // Toggle Verification with optimistic UI + Firestore transaction
+  // Select a report and open mobile bottom sheet if on small screens
+  const handleSelectReport = (rep: CommunityReport) => {
+    setSelectedReport(rep);
+    setIsMobileSheetOpen(true);
+  };
+
+  // Toggle Verification with optimistic UI + Firestore transaction (1 per user)
   const handleToggleVerification = async (report: CommunityReport) => {
     if (!user) return;
 
@@ -366,7 +421,7 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
 
     try {
       const result = await toggleReportVerification(report.id, user.uid);
-      // Synchronize exact result
+      // Synchronize exact result from transaction
       setReports((prev) =>
         prev.map((r) =>
           r.id === report.id
@@ -387,7 +442,6 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
       }
     } catch (err) {
       console.warn('Verification sync failed, reverting:', err);
-      // Revert on error
       setReports(reports);
       if (selectedReport?.id === report.id) {
         setSelectedReport(report);
@@ -395,45 +449,11 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
     }
   };
 
-  // Submit new report modal handler
-  const handleSubmitReport = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newSourceName.trim() || !user) return;
-
-    setIsSubmittingReport(true);
-
-    const lat = userLocation ? userLocation.lat : 37.7749 + (Math.random() - 0.5) * 0.04;
-    const lon = userLocation ? userLocation.lon : -122.4194 + (Math.random() - 0.5) * 0.04;
-
-    try {
-      const created = await createCommunityReport({
-        uid: user.uid,
-        authorName: user.name || 'AquaSense Contributor',
-        bottleId: bottle?.bottleId || user.bottleId || 'ASX-9821-4402',
-        latitude: lat,
-        longitude: lon,
-        sourceName: newSourceName.trim(),
-        sourceType: newSourceType,
-        qualityScore: qualityEval.score,
-        temperature: bottle?.temperature || 21.0,
-        tds: bottle?.tds || 180,
-        turbidity: bottle?.turbidity || 0.4,
-        ph: bottle?.ph || 7.2,
-        verifiedReports: 1,
-        userHasVerified: true,
-        notes: newNotes.trim() || 'Verified with AquaSense X smart sensor.',
-      });
-
-      setReports([created, ...reports]);
-      setSelectedReport(created);
-      setIsSubmitModalOpen(false);
-      setNewSourceName('');
-      setNewNotes('');
-    } catch (err) {
-      console.error('Error creating report:', err);
-    } finally {
-      setIsSubmittingReport(false);
-    }
+  // Handler when a new report is published from the test modal
+  const handlePublishSuccess = (newReport: CommunityReport) => {
+    setReports((prev) => [newReport, ...prev]);
+    setSelectedReport(newReport);
+    setIsMobileSheetOpen(true);
   };
 
   const getScoreColor = (score: number) => {
@@ -455,47 +475,30 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
         return 'Groundwater Well';
       case 'fountain':
       default:
-        return 'Public Fountain';
+        return 'Water Fountain';
     }
   };
 
   return (
-    <div className="min-h-full bg-[#090B0E] text-[#F8FAFC] flex flex-col transition-colors duration-200">
-      <Header
-        title="Community Water Map"
-        mobileTitle="Water Map"
-        subtitle="Live crowdsourced water testing reported by AquaSense X users"
-      />
+    <div className="space-y-4 sm:space-y-6 pb-20 lg:pb-8 max-w-7xl mx-auto px-3 sm:px-4 lg:px-6">
+      <Header />
 
-      <div className="p-3.5 xs:p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full flex-1 flex flex-col space-y-4 sm:space-y-6">
-        {/* Location Error Banner */}
-        {locState.status === 'error' && (
-          <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center justify-between gap-2 shadow-sm">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
-              <span>{locState.errorMessage}</span>
-            </div>
-            <button
-              onClick={handleUseMyLocation}
-              className="text-[11px] font-semibold text-white underline shrink-0 px-2 py-1"
-            >
-              Retry
-            </button>
-          </div>
-        )}
-
-        {/* Top Controls Bar: Real Geocoding Search, Geolocation & Filter Pills */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
-          {/* Search bar with real Nominatim Geocoding dropdown */}
-          <div className="relative flex-1 max-w-lg z-30">
-            <div className="relative flex items-center">
+      <div className="space-y-4 sm:space-y-5">
+        {/* Top Control Bar: Search, Real Geolocation, Quality Filters & Report Source Button */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-[#12161C] p-3 sm:p-4 rounded-[24px] sm:rounded-[28px] border border-white/5 shadow-xl">
+          {/* Search Input with Nominatim Autocomplete */}
+          <div className="relative flex-1">
+            <div className="relative">
               <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => handleSearchChange(e.target.value)}
-                placeholder="Search city, address, fountain, or park..."
-                className="w-full bg-[#12161C] border border-white/10 rounded-2xl pl-10 pr-10 py-2.5 text-xs sm:text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50"
+                onFocus={() => {
+                  if (searchResults.length > 0) setShowSearchDropdown(true);
+                }}
+                placeholder="Search city, neighborhood, park, or source..."
+                className="w-full bg-[#090B0E] border border-white/10 rounded-2xl pl-10 pr-10 py-2.5 text-xs sm:text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50 transition-colors"
               />
               {isSearchingLocation ? (
                 <Loader2 className="w-4 h-4 text-[#00D1FF] animate-spin absolute right-3.5 top-1/2 -translate-y-1/2" />
@@ -505,6 +508,7 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
                     setSearchQuery('');
                     setSearchResults([]);
                     setShowSearchDropdown(false);
+                    setExploreLocation(null);
                   }}
                   className="p-1 text-neutral-400 hover:text-white absolute right-3 top-1/2 -translate-y-1/2"
                 >
@@ -534,17 +538,17 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
             )}
           </div>
 
-          {/* Action Row: Use My Location, Quality Filter Pills & Report Source */}
+          {/* Action Row: Use My Location, Quality Filter Pills & Single Report Source Button */}
           <div className="flex flex-wrap items-center gap-2">
             {/* Real Geolocation Button */}
             <button
               onClick={handleUseMyLocation}
               disabled={locState.status === 'acquiring'}
-              title="Locate my position on map"
+              title="Locate my current GPS position on map"
               className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl border text-xs font-semibold transition-all touch-target sm:min-h-0 sm:min-w-0 ${
-                userLocation
-                  ? 'bg-[#00D1FF]/15 text-[#00D1FF] border-[#00D1FF]/30 shadow-sm'
-                  : 'bg-[#12161C] text-neutral-300 hover:text-white border-white/10 hover:border-white/20'
+                userLocation && !exploreLocation
+                  ? 'bg-[#00D1FF]/15 text-[#00D1FF] border-[#00D1FF]/40 shadow-sm'
+                  : 'bg-[#090B0E] text-neutral-300 hover:text-white border-white/10 hover:border-white/20'
               }`}
             >
               {locState.status === 'acquiring' ? (
@@ -552,11 +556,11 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
               ) : (
                 <Navigation className="w-3.5 h-3.5 text-[#00D1FF]" />
               )}
-              <span>{userLocation ? 'My Location Active' : 'Use My Location'}</span>
+              <span>{userLocation && !exploreLocation ? 'My GPS Active' : 'Use My Location'}</span>
             </button>
 
             {/* Quality Filter Pills */}
-            <div className="flex items-center bg-[#12161C] border border-white/5 rounded-2xl p-1 text-xs font-medium shrink-0">
+            <div className="flex items-center bg-[#090B0E] border border-white/10 rounded-2xl p-1 text-xs font-medium shrink-0">
               <button
                 onClick={() => setFilterQuality('all')}
                 className={`px-3 py-1.5 rounded-xl transition-all touch-target sm:min-h-0 sm:min-w-0 ${
@@ -589,10 +593,10 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
               </button>
             </div>
 
-            {/* Report Source Button */}
+            {/* Single Report Source Button (triggers real GPS test flow) */}
             <button
-              onClick={() => setIsSubmitModalOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2.5 rounded-2xl bg-[#00D1FF] hover:bg-[#00B4D8] text-[#090B0E] text-xs font-semibold shrink-0 shadow-lg shadow-[#00D1FF]/20 active:scale-95 transition-all touch-target sm:min-h-0 sm:min-w-0"
+              onClick={() => setIsReportModalOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-[#00D1FF] hover:bg-[#00B4D8] text-[#090B0E] text-xs font-semibold shrink-0 shadow-lg shadow-[#00D1FF]/20 active:scale-95 transition-all touch-target sm:min-h-0 sm:min-w-0 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Report Source</span>
@@ -600,35 +604,59 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
           </div>
         </div>
 
-        {/* Interactive Leaflet Map & Side Panel Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 flex-1 items-start">
-          {/* Real Leaflet OpenStreetMap Canvas (7 cols on lg) */}
-          <div className="lg:col-span-7 bg-[#12161C] border border-white/5 rounded-[28px] sm:rounded-[32px] p-2.5 sm:p-3 overflow-hidden relative shadow-2xl flex flex-col">
+        {/* Location Exploration Status Banner if active */}
+        {exploreLocation && (
+          <div className="flex items-center justify-between px-4 py-2.5 bg-[#181E26] border border-amber-500/30 rounded-2xl text-xs text-amber-300">
+            <div className="flex items-center gap-2 min-w-0">
+              <Compass className="w-4 h-4 shrink-0 text-amber-400" />
+              <span className="truncate">
+                Exploring water sources near: <strong>{exploreLocation.label || 'Selected Location'}</strong>
+              </span>
+            </div>
+            <button
+              onClick={() => setExploreLocation(null)}
+              className="text-[11px] underline text-neutral-400 hover:text-white shrink-0 ml-2"
+            >
+              Reset exploration
+            </button>
+          </div>
+        )}
+
+        {/* Main Map & Side Panel Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-start">
+          {/* Leaflet OpenStreetMap Canvas (7 cols on lg) */}
+          <div className="lg:col-span-7 bg-[#12161C] border border-white/5 rounded-[28px] sm:rounded-[32px] p-2.5 sm:p-3.5 overflow-hidden relative shadow-2xl flex flex-col">
             {/* Top Status Bar over Map */}
-            <div className="flex items-center justify-between pb-2 px-2 text-[11px] sm:text-xs">
-              <div className="flex items-center gap-1.5 text-neutral-300 font-medium">
-                <Compass className="w-3.5 h-3.5 text-[#00D1FF]" />
+            <div className="flex items-center justify-between pb-2.5 px-2 text-[11px] sm:text-xs">
+              <div className="flex items-center gap-1.5 text-neutral-300 font-medium truncate">
+                <Compass className="w-3.5 h-3.5 text-[#00D1FF] shrink-0" />
                 <span className="truncate">
-                  {userLocation ? 'Centered near your GPS location' : 'Global Water Purity Network'}
+                  {exploreLocation
+                    ? `Centered on: ${exploreLocation.label}`
+                    : userLocation
+                    ? 'Centered near your GPS position'
+                    : 'Global AquaSense Water Quality Network'}
                 </span>
               </div>
-              <span className="text-[10px] text-neutral-400 font-mono">
+              <span className="text-[10px] text-neutral-400 font-mono shrink-0 ml-2">
                 {filteredReports.length} Sources Mapped
               </span>
             </div>
 
-            {/* Real Leaflet Map Component */}
-            <div className="w-full h-[320px] xs:h-[380px] sm:h-[460px] lg:h-[560px] rounded-[22px] sm:rounded-[26px] overflow-hidden border border-white/10">
+            {/* Real Leaflet Map Component with Exploration Pin & Map Click Handler */}
+            <div className="w-full h-[340px] xs:h-[400px] sm:h-[480px] lg:h-[580px] rounded-[22px] sm:rounded-[26px] overflow-hidden border border-white/10 relative">
               <LeafletCommunityMap
                 reports={filteredReports}
                 selectedReport={selectedReport}
-                onSelectReport={(rep) => setSelectedReport(rep)}
+                onSelectReport={handleSelectReport}
                 userLocation={userLocation}
+                exploreLocation={exploreLocation}
+                onMapClick={handleMapClick}
               />
             </div>
 
-            {/* Map Legend */}
-            <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 px-2 text-[10px] sm:text-[11px] text-neutral-400">
+            {/* Map Legend & Click Guidance */}
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-2 text-[10px] sm:text-[11px] text-neutral-400">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-[#00D1FF]" /> Pure (88–100)
@@ -641,21 +669,17 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
                 </span>
               </div>
               <span className="text-[10px] text-neutral-500 font-mono">
-                OpenStreetMap Real Tiles
+                Click map to explore any area • GPS required to report
               </span>
             </div>
           </div>
 
-          {/* Selected Water Source Details Card & Nearby Feed (5 cols on lg) */}
+          {/* Selected Water Source Details Card & Nearby Directory Feed (5 cols on lg) */}
           <div className="lg:col-span-5 space-y-4">
+            {/* Desktop Selected Water Source Card */}
             {selectedReport ? (
-              <motion.div
-                key={selectedReport.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-4 xs:p-5 sm:p-6 rounded-[28px] sm:rounded-[32px] bg-[#12161C] border border-cyan-500/20 shadow-2xl space-y-3.5 sm:space-y-4"
-              >
-                {/* Header */}
+              <div className="hidden lg:block p-5 sm:p-6 rounded-[28px] sm:rounded-[32px] bg-[#12161C] border border-cyan-500/20 shadow-2xl space-y-4">
+                {/* Card Header */}
                 <div className="flex items-start justify-between gap-3 pb-3.5 border-b border-white/5">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 mb-1">
@@ -667,11 +691,11 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
                       </span>
                     </div>
 
-                    <h3 className="text-sm sm:text-base font-semibold text-white leading-tight truncate">
+                    <h3 className="text-base font-semibold text-white leading-tight truncate">
                       {selectedReport.sourceName}
                     </h3>
 
-                    <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[11px] sm:text-xs text-neutral-400">
+                    <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-neutral-400">
                       <div className="flex items-center gap-1">
                         <Clock className="w-3.5 h-3.5 text-neutral-400" />
                         <span>{selectedReport.lastTestedAt}</span>
@@ -691,10 +715,10 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
 
                   <div className="text-right shrink-0">
                     <div className="flex items-baseline justify-end gap-1">
-                      <span className="text-2xl sm:text-3xl font-light text-white font-sans">
+                      <span className="text-3xl font-light text-white font-sans">
                         {selectedReport.qualityScore}
                       </span>
-                      <span className="text-[11px] text-neutral-400 font-mono">/100</span>
+                      <span className="text-xs text-neutral-400 font-mono">/100</span>
                     </div>
                     <span
                       className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
@@ -706,7 +730,7 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
                   </div>
                 </div>
 
-                {/* Sensor telemetry snapshot */}
+                {/* Sensor Telemetry Snapshot */}
                 <div className="grid grid-cols-4 gap-2 text-center text-xs p-3 rounded-2xl bg-[#090B0E] border border-white/5">
                   <div>
                     <span className="text-[9px] text-neutral-500 block font-mono">pH</span>
@@ -733,216 +757,207 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
                   </p>
                 )}
 
-                {/* 1-Per-User Atomic Verification Button */}
-                <div className="pt-1">
-                  <button
-                    onClick={() => handleToggleVerification(selectedReport)}
-                    className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-xs font-semibold transition-all border touch-target sm:min-h-0 sm:min-w-0 cursor-pointer active:scale-98 ${
-                      selectedReport.userHasVerified
-                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40 shadow-sm shadow-emerald-500/10'
-                        : 'bg-white/[0.04] hover:bg-white/[0.08] text-white border-white/10 hover:border-[#00D1FF]/40'
-                    }`}
-                  >
-                    <ThumbsUp className="w-4 h-4" />
-                    <span>
-                      {selectedReport.userHasVerified ? '✓ Verified by You' : 'Verify This Water Source'}{' '}
-                      ({selectedReport.verifiedReports} verifications)
-                    </span>
-                  </button>
-                </div>
+                {/* Verification Action Button */}
+                <button
+                  onClick={() => handleToggleVerification(selectedReport)}
+                  className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-xs font-semibold transition-all border touch-target sm:min-h-0 sm:min-w-0 cursor-pointer active:scale-98 ${
+                    selectedReport.userHasVerified
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40 shadow-sm shadow-emerald-500/10'
+                      : 'bg-white/[0.04] hover:bg-white/[0.08] text-white border-white/10 hover:border-[#00D1FF]/40'
+                  }`}
+                >
+                  <ThumbsUp className="w-4 h-4" />
+                  <span>
+                    {selectedReport.userHasVerified ? '✓ Verified by You' : 'Verify This Water Source'}{' '}
+                    ({selectedReport.verifiedReports} verifications)
+                  </span>
+                </button>
 
-                {/* Freshness & Guidance Disclaimer */}
-                <div className="pt-2 border-t border-white/5 text-[10px] sm:text-[11px] text-neutral-400 flex items-center gap-1.5">
+                {/* Quality Guidance Footer */}
+                <div className="pt-2 border-t border-white/5 text-[10px] text-neutral-400 flex items-center gap-1.5">
                   <Info className="w-3.5 h-3.5 shrink-0 text-[#00D1FF]" />
                   <span className="truncate">
-                    Crowdsourced from verified AquaSense X optical & electrical sensors.
+                    Crowdsourced from verified AquaSense X smart bottle optical & electrical sensors.
                   </span>
                 </div>
-              </motion.div>
-            ) : (
-              <div className="p-6 sm:p-8 rounded-[28px] sm:rounded-[32px] bg-[#12161C] border border-white/5 text-center text-neutral-400 text-xs">
-                Select a water source pin on the map to inspect chemical purity and verification history.
               </div>
-            )}
+            ) : null}
 
             {/* Nearby Water Sources Feed */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between px-1">
+            <div className="space-y-2 bg-[#12161C] p-4 sm:p-5 rounded-[28px] sm:rounded-[32px] border border-white/5 shadow-xl">
+              <div className="flex items-center justify-between px-1 pb-1">
                 <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-neutral-400">
-                  {userLocation ? 'Nearby Sources (Sorted by Distance)' : 'Community Source Directory'}
+                  {activeCenter ? `Nearby Sources (${activeCenter.label})` : 'Community Water Directory'}
                 </span>
                 <span className="text-[10px] text-neutral-500 font-mono">
                   {filteredReports.length} results
                 </span>
               </div>
 
-              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                {filteredReports.map((rep) => {
-                  const isSelected = selectedReport?.id === rep.id;
-                  const scoreInfo = getScoreColor(rep.qualityScore);
+              <div className="space-y-2 max-h-80 sm:max-h-96 overflow-y-auto pr-1">
+                {filteredReports.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-neutral-500">
+                    No community water sources found matching your query.
+                  </div>
+                ) : (
+                  filteredReports.map((rep) => {
+                    const isSelected = selectedReport?.id === rep.id;
+                    const scoreInfo = getScoreColor(rep.qualityScore);
 
-                  return (
-                    <div
-                      key={rep.id}
-                      onClick={() => setSelectedReport(rep)}
-                      className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between touch-target sm:min-h-0 ${
-                        isSelected
-                          ? 'bg-[#181E26] border-[#00D1FF]/60 shadow-md ring-1 ring-[#00D1FF]/30'
-                          : 'bg-[#12161C] border-white/5 hover:bg-white/[0.04] hover:border-white/15'
-                      }`}
-                    >
-                      <div className="min-w-0 flex-1 pr-3">
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs font-semibold text-white truncate">{rep.sourceName}</p>
+                    return (
+                      <div
+                        key={rep.id}
+                        onClick={() => handleSelectReport(rep)}
+                        className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between touch-target sm:min-h-0 ${
+                          isSelected
+                            ? 'bg-[#181E26] border-[#00D1FF]/60 shadow-md ring-1 ring-[#00D1FF]/30'
+                            : 'bg-[#090B0E] border-white/5 hover:bg-white/[0.04] hover:border-white/15'
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1 pr-3">
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-semibold text-white truncate">{rep.sourceName}</p>
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] text-neutral-400 mt-0.5">
+                            <span>{rep.lastTestedAt}</span>
+                            <span>•</span>
+                            <span>{rep.verifiedReports} verified</span>
+                            {rep.distanceKm !== undefined && (
+                              <>
+                                <span>•</span>
+                                <span className="text-cyan-400 font-medium">
+                                  {geocodingService.formatDistance(rep.distanceKm)}
+                                </span>
+                              </>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 text-[10px] text-neutral-400 mt-0.5">
-                          <span>{rep.lastTestedAt}</span>
-                          <span>•</span>
-                          <span>{rep.verifiedReports} verified</span>
-                          {rep.distanceKm !== undefined && (
-                            <>
-                              <span>•</span>
-                              <span className="text-cyan-400 font-medium">
-                                {geocodingService.formatDistance(rep.distanceKm)}
-                              </span>
-                            </>
-                          )}
+
+                        <div className="text-right shrink-0">
+                          <span
+                            className={`text-xs font-bold px-2.5 py-1 rounded-xl font-sans inline-block ${scoreInfo.bg}/15 ${scoreInfo.text} border ${scoreInfo.border}`}
+                          >
+                            {rep.qualityScore} pts
+                          </span>
                         </div>
                       </div>
-
-                      <div className="text-right shrink-0">
-                        <span
-                          className={`text-xs font-bold px-2.5 py-1 rounded-xl font-sans inline-block ${scoreInfo.bg}/15 ${scoreInfo.text} border ${scoreInfo.border}`}
-                        >
-                          {rep.qualityScore} pts
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Manual Report Modal from Community Screen */}
+      {/* Mobile Bottom Sheet Modal for Selected Water Source */}
       <AnimatePresence>
-        {isSubmitModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md">
+        {isMobileSheetOpen && selectedReport && (
+          <div className="lg:hidden fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm p-0">
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              className="w-full sm:max-w-lg bg-[#12161C] border-t sm:border border-white/10 rounded-t-[28px] sm:rounded-[32px] p-5 sm:p-7 shadow-2xl relative max-h-[90vh] overflow-y-auto safe-area-pb"
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 280 }}
+              className="w-full bg-[#12161C] border-t border-cyan-500/30 rounded-t-[28px] p-5 shadow-2xl max-h-[85vh] overflow-y-auto safe-area-pb space-y-4"
             >
-              <div className="flex items-center justify-between pb-3.5 border-b border-white/10">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-[#00D1FF]/10 border border-[#00D1FF]/20 flex items-center justify-center">
-                    <MapPin className="w-4 h-4 text-[#00D1FF]" />
+              {/* Header with dismiss button */}
+              <div className="flex items-start justify-between gap-3 pb-3 border-b border-white/10">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#00D1FF]">
+                      Selected Water Source
+                    </span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/[0.05] border border-white/10 text-neutral-300">
+                      {getSourceTypeLabel(selectedReport.sourceType)}
+                    </span>
                   </div>
-                  <h3 className="text-sm sm:text-base font-semibold text-white">Publish Community Report</h3>
+                  <h3 className="text-base font-semibold text-white leading-tight truncate">
+                    {selectedReport.sourceName}
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-neutral-400">
+                    <span>{selectedReport.lastTestedAt}</span>
+                    {selectedReport.distanceKm !== undefined && (
+                      <>
+                        <span>•</span>
+                        <span className="text-cyan-300 font-medium">
+                          {geocodingService.formatDistance(selectedReport.distanceKm)}
+                        </span>
+                      </>
+                    )}
+                    <span>•</span>
+                    <span>By {selectedReport.authorName || 'AquaSense User'}</span>
+                  </div>
                 </div>
-                <button
-                  onClick={() => setIsSubmitModalOpen(false)}
-                  className="p-1.5 rounded-xl text-neutral-400 hover:text-white hover:bg-white/5"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="text-right">
+                    <span className="text-2xl font-light text-white font-sans">
+                      {selectedReport.qualityScore}
+                    </span>
+                    <span className="text-[10px] text-neutral-400 font-mono">/100</span>
+                  </div>
+                  <button
+                    onClick={() => setIsMobileSheetOpen(false)}
+                    className="p-1.5 rounded-xl text-neutral-400 hover:text-white bg-white/5"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
-              <form onSubmit={handleSubmitReport} className="mt-4 space-y-4">
-                {/* Live readings snapshot */}
-                <div className="p-3.5 rounded-2xl bg-[#090B0E] border border-white/5">
-                  <span className="text-[10px] uppercase font-semibold text-[#00D1FF] block mb-2">
-                    AquaSense X Telemetry attached:
-                  </span>
-                  <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                    <div>
-                      <span className="text-neutral-500 block text-[9px]">SCORE</span>
-                      <span className="font-semibold text-[#00D1FF]">{qualityEval.score}/100</span>
-                    </div>
-                    <div>
-                      <span className="text-neutral-500 block text-[9px]">pH</span>
-                      <span className="font-semibold text-white">{bottle?.ph ?? 7.2}</span>
-                    </div>
-                    <div>
-                      <span className="text-neutral-500 block text-[9px]">TDS</span>
-                      <span className="font-semibold text-white">{bottle?.tds ?? 180} ppm</span>
-                    </div>
-                    <div>
-                      <span className="text-neutral-500 block text-[9px]">TURBIDITY</span>
-                      <span className="font-semibold text-white">{bottle?.turbidity ?? 0.4} NTU</span>
-                    </div>
-                  </div>
-                </div>
-
+              {/* Sensor snapshot */}
+              <div className="grid grid-cols-4 gap-2 text-center text-xs p-3 rounded-2xl bg-[#090B0E] border border-white/5">
                 <div>
-                  <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-                    Source Name / Location Title *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newSourceName}
-                    onChange={(e) => setNewSourceName(e.target.value)}
-                    placeholder="e.g. Yerba Buena Gardens Chilled Fountain"
-                    className="w-full bg-[#090B0E] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50"
-                  />
+                  <span className="text-[9px] text-neutral-500 block font-mono">pH</span>
+                  <span className="font-semibold text-white">{selectedReport.ph}</span>
                 </div>
-
                 <div>
-                  <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-                    Source Category
-                  </label>
-                  <select
-                    value={newSourceType}
-                    onChange={(e) => setNewSourceType(e.target.value as any)}
-                    className="w-full bg-[#090B0E] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-[#00D1FF]/50"
-                  >
-                    <option value="fountain">Public Drinking Fountain</option>
-                    <option value="filtration_station">Bottle Refill & Filtration Station</option>
-                    <option value="tap">Municipal Tap</option>
-                    <option value="spring">Natural Spring</option>
-                    <option value="well">Groundwater Well</option>
-                    <option value="other">Other Source</option>
-                  </select>
+                  <span className="text-[9px] text-neutral-500 block font-mono">TDS</span>
+                  <span className="font-semibold text-white">{selectedReport.tds} ppm</span>
                 </div>
-
                 <div>
-                  <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-                    Public Observations / Tasting Notes
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={newNotes}
-                    onChange={(e) => setNewNotes(e.target.value)}
-                    placeholder="e.g. Crisp flow, cold, digital filter status active."
-                    className="w-full bg-[#090B0E] border border-white/10 rounded-xl px-3 py-2 text-xs sm:text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50 resize-none"
-                  />
+                  <span className="text-[9px] text-neutral-500 block font-mono">CLARITY</span>
+                  <span className="font-semibold text-white">{selectedReport.turbidity} NTU</span>
                 </div>
+                <div>
+                  <span className="text-[9px] text-neutral-500 block font-mono">TEMP</span>
+                  <span className="font-semibold text-white">{selectedReport.temperature}°C</span>
+                </div>
+              </div>
 
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsSubmitModalOpen(false)}
-                    className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-medium text-neutral-300 hover:text-white bg-white/[0.04]"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmittingReport}
-                    className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-[#00D1FF] hover:bg-[#00B4D8] text-[#090B0E] font-semibold text-xs transition-colors disabled:opacity-50"
-                  >
-                    {isSubmittingReport ? 'Publishing...' : 'Publish Report'}
-                  </button>
-                </div>
-              </form>
+              {selectedReport.notes && (
+                <p className="text-xs text-neutral-300 leading-relaxed bg-[#090B0E] p-3 rounded-2xl border border-white/5 italic">
+                  "{selectedReport.notes}"
+                </p>
+              )}
+
+              {/* Verification Button */}
+              <button
+                onClick={() => handleToggleVerification(selectedReport)}
+                className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-xs font-semibold transition-all border touch-target ${
+                  selectedReport.userHasVerified
+                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                    : 'bg-white/[0.04] text-white border-white/10'
+                }`}
+              >
+                <ThumbsUp className="w-4 h-4" />
+                <span>
+                  {selectedReport.userHasVerified ? '✓ Verified by You' : 'Verify This Water Source'}{' '}
+                  ({selectedReport.verifiedReports} verifications)
+                </span>
+              </button>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
+
+      {/* Unified Test & Report Water Modal with strict device GPS location lock */}
+      <UnknownSourceTestModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        onSuccessPublish={handlePublishSuccess}
+      />
     </div>
   );
 };

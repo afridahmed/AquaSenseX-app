@@ -142,3 +142,35 @@ export function formatRelativeTime(dateString?: string): string {
   if (diffDays < 30) return `Tested ${diffDays}d ago`;
   return `Tested on ${date.toLocaleDateString()}`;
 }
+
+/**
+ * Saves a private water quality test into the user's private Firestore subcollection
+ * This is NEVER published to the public Community Map
+ */
+export async function savePrivateWaterTest(testData: {
+  uid: string;
+  bottleId: string;
+  sourceName: string;
+  sourceType: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  qualityScore: number;
+  temperature: number;
+  tds: number;
+  turbidity: number;
+  ph: number;
+  notes?: string;
+}): Promise<{ id: string }> {
+  const now = new Date();
+  const data = {
+    ...testData,
+    isPrivate: true,
+    createdAt: now.toISOString(),
+    serverCreatedAt: serverTimestamp(),
+  };
+
+  const userTestsRef = collection(db, 'users', testData.uid, 'waterTests');
+  const docRef = await addDoc(userTestsRef, data);
+  return { id: docRef.id };
+}
+

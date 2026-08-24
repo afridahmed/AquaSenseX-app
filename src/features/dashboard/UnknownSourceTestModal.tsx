@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useBottle } from '../../context/BottleContext';
 import { useAuth } from '../../context/AuthContext';
 import { geocodingService } from '../../services/geocoding/geocodingService';
-import { createCommunityReport } from '../../services/community/communityService';
+import { createCommunityReport, savePrivateWaterTest } from '../../services/community/communityService';
 import { CommunityReport } from '../../types';
 import {
   FlaskConical,
@@ -175,9 +175,26 @@ export const UnknownSourceTestModal: React.FC<UnknownSourceTestModalProps> = ({
   };
 
   const handleKeepPrivate = async () => {
+    if (!user) return;
     setIsPrivateSaving(true);
     try {
-      // Save privately in user's personal bottle sensor history only (no community publication, no hydration intake)
+      // 1. Save in user's private waterTests subcollection (never published to community)
+      await savePrivateWaterTest({
+        uid: user.uid,
+        bottleId: bottle?.bottleId || user.bottleId || 'ASX-9821-4402',
+        sourceName: sourceName.trim() || locState.placeName || 'Private Water Test',
+        sourceType,
+        latitude: locState.lat,
+        longitude: locState.lon,
+        qualityScore: qualityEval.score,
+        temperature: bottle?.temperature || 21.0,
+        tds: bottle?.tds || 180,
+        turbidity: bottle?.turbidity || 0.4,
+        ph: bottle?.ph || 7.2,
+        notes: notes.trim() || 'Private water test from AquaSense X sensor.',
+      });
+
+      // 2. Also record in user's personal bottle sensor history (no community publication, no hydration intake)
       await recordSensorReading(
         notes ? `[Private Water Test: ${sourceName || 'Unknown Source'}] ${notes}` : `Private Water Test: ${sourceName || 'Unknown Source'}`
       );
