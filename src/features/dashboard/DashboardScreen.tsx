@@ -56,7 +56,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       {/* 1. Header / bottle status */}
       <Header
         title="AquaSense X"
-        subtitle={`Live monitoring • ${bottle?.bottleId || 'ASX-9821-4402'}`}
+        subtitle={`Live monitoring • ${bottle?.bottleId || 'Bottle Connected'}`}
       />
 
       <div className="p-3.5 xs:p-4 sm:p-5 lg:p-6 max-w-4xl mx-auto w-full space-y-3.5 sm:space-y-4 lg:space-y-5">

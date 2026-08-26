@@ -98,8 +98,8 @@ export async function toggleReportVerification(
 
       transaction.set(reportRef, {
         id: reportId,
-        uid: fallbackReport?.uid || 'community_seed',
-        bottleId: fallbackReport?.bottleId || 'ASX-9821-4402',
+        uid: fallbackReport?.uid || 'community_member',
+        bottleId: fallbackReport?.bottleId || '',
         authorName: fallbackReport?.authorName || 'Community Member',
         sourceName: fallbackReport?.sourceName || 'Public Water Source',
         sourceType: fallbackReport?.sourceType || 'fountain',

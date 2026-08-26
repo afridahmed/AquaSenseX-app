@@ -26,10 +26,9 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 
-export interface DeleteAccountOptions {
-  password?: string;
-  forceWipeAndSignOutIfBlocked?: boolean;
-}
+import { deleteUserAccountAndAllData, DeleteAccountParams } from '../services/firebase/accountDeletionService';
+
+export interface DeleteAccountOptions extends DeleteAccountParams {}
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -316,112 +315,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Delete account with automatic re-authentication support (Google popup or email password credential)
+  // Delete account with robust full data wiping and authentication lifecycle management
   const deleteAccount = async (options?: string | DeleteAccountOptions) => {
     const currentUser = auth.currentUser;
     if (!currentUser) {
       throw new Error('No active user session found.');
     }
 
-    const passwordForReauth = typeof options === 'string' ? options : options?.password;
-    const forceWipeAndSignOutIfBlocked =
-      typeof options === 'object' ? Boolean(options?.forceWipeAndSignOutIfBlocked) : false;
-
     setLoading(true);
     try {
-      const currentUid = currentUser.uid;
-      const currentBottleId = user?.bottleId;
-      const isGoogleUser = currentUser.providerData.some(
-        (p) => p.providerId === 'google.com' || p.providerId === googleAuthProvider.providerId
-      );
-
-      // Pre-authenticate if email/password credential provided
-      if (passwordForReauth && currentUser.email && !isGoogleUser) {
-        const credential = EmailAuthProvider.credential(currentUser.email, passwordForReauth);
-        await reauthenticateWithCredential(currentUser, credential);
-      }
-
-      // Step 1: Disassociate bottle if exists and owned by current user
-      if (currentBottleId) {
-        try {
-          const bottleRef = doc(db, 'bottles', currentBottleId);
-          await runTransaction(db, async (transaction) => {
-            const snap = await transaction.get(bottleRef);
-            if (snap.exists() && snap.data().ownerUid === currentUid) {
-              transaction.update(bottleRef, {
-                ownerUid: null,
-                lastUpdated: new Date().toISOString(),
-                serverUpdatedAt: serverTimestamp(),
-              });
-            }
-          });
-        } catch (e) {
-          console.warn('Could not release bottle ownership:', e);
-        }
-      }
-
-      // Step 2: Delete user document from Firestore while authenticated
-      try {
-        await deleteDoc(doc(db, 'users', currentUid));
-      } catch (e) {
-        console.warn('Could not delete Firestore user doc:', e);
-      }
-
-      // Step 3: Delete Firebase Auth user
-      let authUserDeleted = false;
-      try {
-        await fbDeleteUser(currentUser);
-        authUserDeleted = true;
-      } catch (authErr: any) {
-        const isRecentLoginError =
-          authErr.code === 'auth/requires-recent-login' ||
-          authErr.message?.includes('requires-recent-login');
-
-        if (isRecentLoginError) {
-          if (isGoogleUser) {
-            try {
-              await reauthenticateWithPopup(currentUser, googleAuthProvider);
-              await fbDeleteUser(currentUser);
-              authUserDeleted = true;
-            } catch (popupErr: any) {
-              console.warn('Google re-authentication failed or blocked:', popupErr);
-              if (
-                forceWipeAndSignOutIfBlocked ||
-                popupErr.code === 'auth/popup-blocked' ||
-                popupErr.message?.includes('popup-blocked')
-              ) {
-                // If popup blocked or force wipe requested, sign out so session is terminated cleanly
-                await fbSignOut(auth);
-                authUserDeleted = true;
-              } else {
-                throw popupErr;
-              }
-            }
-          } else if (passwordForReauth && currentUser.email) {
-            const credential = EmailAuthProvider.credential(currentUser.email, passwordForReauth);
-            await reauthenticateWithCredential(currentUser, credential);
-            await fbDeleteUser(currentUser);
-            authUserDeleted = true;
-          } else {
-            if (forceWipeAndSignOutIfBlocked) {
-              await fbSignOut(auth);
-              authUserDeleted = true;
-            } else {
-              throw authErr;
-            }
-          }
-        } else {
-          if (forceWipeAndSignOutIfBlocked) {
-            await fbSignOut(auth);
-            authUserDeleted = true;
-          } else {
-            throw authErr;
-          }
-        }
-      }
-
-      // Step 4: Successfully deleted / cleaned up -> clear app state
-      if (authUserDeleted) {
+      const result = await deleteUserAccountAndAllData(options);
+      if (result.success) {
         setFirebaseUser(null);
         setUser(null);
         setIsPairingModalOpen(false);
@@ -515,51 +419,62 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Unpair / Change bottle (Profile -> My Bottle -> Change Bottle)
   const unpairBottle = async () => {
-    if (!user || !auth.currentUser) return;
-    const currentBottle = user.bottleId;
+    if (!auth.currentUser) throw new Error('You must be signed in to change a bottle.');
     const currentUid = auth.currentUser.uid;
+    const userDocRef = doc(db, 'users', currentUid);
 
-    if (currentBottle) {
-      try {
-        const bottleRef = doc(db, 'bottles', currentBottle);
-        // Atomically release bottle ONLY if current user is the verified owner
-        await runTransaction(db, async (transaction) => {
-          const snap = await transaction.get(bottleRef);
-          if (snap.exists() && snap.data().ownerUid === currentUid) {
-            transaction.update(bottleRef, {
-              ownerUid: null,
-              lastUpdated: new Date().toISOString(),
-              serverUpdatedAt: serverTimestamp(),
-            });
-          }
-        });
-      } catch (err) {
-        console.warn('Could not release bottle ownership:', err);
-      }
-    }
-
+    setLoading(true);
     try {
-      const userRef = doc(db, 'users', currentUid);
-      await updateDoc(userRef, {
-        bottleId: null,
-        updatedAt: new Date().toISOString(),
-        serverUpdatedAt: serverTimestamp(),
-      });
-    } catch (err) {
-      console.warn('Could not reset user bottleId:', err);
-    }
+      await runTransaction(db, async (transaction) => {
+        const userSnap = await transaction.get(userDocRef);
+        const currentBottleId = userSnap.exists() ? userSnap.data()?.bottleId : user?.bottleId;
 
-    setUser((prev) =>
-      prev
-        ? {
-            ...prev,
+        if (currentBottleId) {
+          const bottleRef = doc(db, 'bottles', currentBottleId);
+          const bottleSnap = await transaction.get(bottleRef);
+
+          // 1. Verify the current user actually owns the current bottle
+          if (bottleSnap.exists()) {
+            const bData = bottleSnap.data();
+            if (bData.ownerUid === currentUid) {
+              // 2. Atomically release ownerUid
+              transaction.update(bottleRef, {
+                ownerUid: null,
+                lastUpdated: new Date().toISOString(),
+                serverUpdatedAt: serverTimestamp(),
+              });
+            }
+          }
+        }
+
+        // 3. Clear users/{uid}.bottleId
+        if (userSnap.exists()) {
+          transaction.update(userDocRef, {
             bottleId: null,
             updatedAt: new Date().toISOString(),
-          }
-        : null
-    );
+            serverUpdatedAt: serverTimestamp(),
+          });
+        }
+      });
 
-    setIsPairingModalOpen(true);
+      setUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              bottleId: null,
+              updatedAt: new Date().toISOString(),
+            }
+          : null
+      );
+
+      // 4. Open Bottle Pairing
+      setIsPairingModalOpen(true);
+    } catch (err: any) {
+      console.error('Error during unpair/change bottle transaction:', err);
+      throw new Error(getFirebaseErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

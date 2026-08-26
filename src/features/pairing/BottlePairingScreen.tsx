@@ -20,8 +20,8 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
   onPaired,
   isChangeBottle = false,
 }) => {
-  const { pairBottle, setIsPairingModalOpen } = useAuth();
-  const [bottleInput, setBottleInput] = useState<string>('ASX-9821-4402');
+  const { pairBottle, setIsPairingModalOpen, signOut, user } = useAuth();
+  const [bottleInput, setBottleInput] = useState<string>('');
   const [status, setStatus] = useState<
     'idle' | 'validating' | 'found' | 'success' | 'error'
   >('idle');
@@ -53,7 +53,7 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
     const isValidFormat = /^ASX-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(cleanId) || /^ASX-[0-9]{4}-[0-9]{4}$/.test(cleanId);
     if (!isValidFormat && cleanId.length < 8) {
       setStatus('error');
-      setErrorMessage('Please enter a valid Bottle ID (e.g. ASX-9821-4402).');
+      setErrorMessage('Please enter a valid Bottle ID (e.g. ASX-XXXX-XXXX).');
       return;
     }
 
@@ -84,15 +84,24 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
         animate={{ opacity: 1, scale: 1 }}
         className="w-full max-w-lg bg-[#12161C] border border-white/5 rounded-[28px] sm:rounded-[32px] p-5 xs:p-6 sm:p-8 shadow-2xl relative z-10 my-auto"
       >
-        {/* Cancel button if changing bottle */}
-        {isChangeBottle && (
-          <button
-            onClick={() => setIsPairingModalOpen(false)}
-            className="absolute right-5 sm:right-6 top-5 sm:top-6 text-xs text-neutral-400 hover:text-white p-2 touch-target sm:min-h-0 sm:min-w-0"
-          >
-            Cancel
-          </button>
-        )}
+        {/* Top actions: Cancel (if has bottle) or Sign Out */}
+        <div className="absolute right-5 sm:right-6 top-5 sm:top-6 flex items-center gap-2">
+          {isChangeBottle && user?.bottleId ? (
+            <button
+              onClick={() => setIsPairingModalOpen(false)}
+              className="text-xs text-neutral-400 hover:text-white px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/10 transition-colors touch-target sm:min-h-0 sm:min-w-0"
+            >
+              Cancel
+            </button>
+          ) : (
+            <button
+              onClick={() => signOut()}
+              className="text-xs text-neutral-400 hover:text-rose-400 px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-rose-500/10 transition-colors touch-target sm:min-h-0 sm:min-w-0"
+            >
+              Sign Out
+            </button>
+          )}
+        </div>
 
         {/* Pairing Hardware Animation Illustration */}
         <div className="flex items-center justify-center my-4 sm:my-6">
@@ -209,32 +218,6 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
                 maxLength={13}
                 className="w-full bg-[#090B0E] border border-white/10 rounded-2xl px-4 py-3 text-base sm:text-lg font-mono text-center tracking-widest text-[#00D1FF] focus:outline-none focus:border-[#00D1FF]/50 transition-colors uppercase"
               />
-            </div>
-          </div>
-
-          {/* Device ID presets */}
-          <div>
-            <div className="flex items-center justify-between text-[11px] text-neutral-400 mb-1.5">
-              <span>Registered Device Presets:</span>
-              <span className="text-neutral-500">Tap to select</span>
-            </div>
-            <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleInputChange('ASX-9821-4402')}
-                className="p-3 rounded-2xl bg-[#090B0E] border border-white/5 hover:border-[#00D1FF]/40 text-left text-xs font-mono text-[#F8FAFC] transition-colors touch-target sm:min-h-0"
-              >
-                ASX-9821-4402
-                <span className="block text-[10px] text-[#00D1FF] font-sans">Pro Edition (Online)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleInputChange('ASX-4109-8831')}
-                className="p-3 rounded-2xl bg-[#090B0E] border border-white/5 hover:border-[#00D1FF]/40 text-left text-xs font-mono text-[#F8FAFC] transition-colors touch-target sm:min-h-0"
-              >
-                ASX-4109-8831
-                <span className="block text-[10px] text-emerald-400 font-sans">Sport Edition</span>
-              </button>
             </div>
           </div>
 

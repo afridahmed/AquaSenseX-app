@@ -78,7 +78,7 @@ export const AICoachScreen: React.FC = () => {
         message: textToSend,
         context: {
           bottleData: {
-            bottleId: bottle?.bottleId || 'ASX-9821-4402',
+            bottleId: bottle?.bottleId || user?.bottleId || 'Not connected',
             qualityScore: qualityEval.score,
             qualityCategory: qualityEval.category,
             temperature: bottle?.temperature,

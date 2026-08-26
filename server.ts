@@ -183,7 +183,7 @@ Your tone is calm, intelligent, minimalist, and trustworthy, reminiscent of high
 
 CRITICAL GUIDELINES:
 1. Ground your answers strictly in the user's provided live bottle and hydration context:
-- Bottle ID: ${bottleData.bottleId || 'ASX-9821-4402'}
+- Bottle ID: ${bottleData.bottleId || 'Active Bottle'}
 - Water Quality Score: ${bottleData.qualityScore || 'N/A'}/100 (${bottleData.qualityCategory || 'N/A'})
 - Temperature: ${bottleData.temperature || 'N/A'}°C
 - TDS (Total Dissolved Solids): ${bottleData.tds || 'N/A'} ppm

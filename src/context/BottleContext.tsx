@@ -79,40 +79,7 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             });
             setHydrationLogs(logs);
           } else {
-            // Seed starter hydration logs in Firestore if brand new
-            const starter = [
-              {
-                amountMl: 350,
-                timestamp: new Date(Date.now() - 3.5 * 3600 * 1000).toISOString(),
-                source: 'bottle_auto',
-                note: 'Morning hydration wake-up',
-              },
-              {
-                amountMl: 400,
-                timestamp: new Date(Date.now() - 1.5 * 3600 * 1000).toISOString(),
-                source: 'bottle_auto',
-                note: 'Mid-morning hydration',
-              },
-            ];
-
-            starter.forEach(async (item) => {
-              try {
-                // Subcollection
-                await addDoc(logsRef, {
-                  ...item,
-                  uid: user.uid,
-                  serverCreatedAt: serverTimestamp(),
-                });
-                // Top-level collection
-                await addDoc(collection(db, 'hydrationLogs'), {
-                  ...item,
-                  uid: user.uid,
-                  serverCreatedAt: serverTimestamp(),
-                });
-              } catch (e) {
-                // non-blocking
-              }
-            });
+            setHydrationLogs([]);
           }
         },
         (error) => {

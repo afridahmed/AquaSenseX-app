@@ -5,12 +5,14 @@
     --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
     
-    /* Dark Theme Default */
+    /* Dark Theme (Default) */
     --bg-canvas: #090B0E;
     --bg-card: #12161C;
     --bg-card-hover: #181E26;
-    --bg-subcard: #0D1117;
+    --bg-subcard: #0B0E13;
+    --bg-input: #090B0E;
     --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-card: rgba(255, 255, 255, 0.06);
     --border-highlight: rgba(0, 209, 255, 0.25);
     --text-primary: #F8FAFC;
     --text-secondary: #94A3B8;
@@ -20,16 +22,19 @@
   }
 
   html.light {
+    /* Refined AquaSense X Light Theme */
     --bg-canvas: #F8FAFC;
     --bg-card: #FFFFFF;
     --bg-card-hover: #F1F5F9;
     --bg-subcard: #F8FAFC;
+    --bg-input: #FFFFFF;
     --border-subtle: rgba(0, 0, 0, 0.08);
-    --border-highlight: rgba(0, 153, 204, 0.3);
+    --border-card: rgba(0, 0, 0, 0.07);
+    --border-highlight: rgba(2, 132, 199, 0.35);
     --text-primary: #0F172A;
     --text-secondary: #475569;
-    --text-muted: #94A3B8;
-    --accent-cyan: #0099CC;
+    --text-muted: #64748B;
+    --accent-cyan: #0284C7;
     --accent-blue: #0066EE;
   }
 
@@ -42,10 +47,137 @@
     min-height: 100vh;
     min-height: 100dvh;
     -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 }
 
-/* Safe area insets support for modern smartphones (iPhone notch, Android nav bar, PWA) */
+/* ==========================================================================
+   LIGHT MODE OVERRIDES FOR EXISTING AQUASENSE X UTILITIES & SURFACES
+   ========================================================================== */
+
+/* Canvases & Main Layout Backgrounds */
+html.light .bg-\[\#090B0E\],
+html.light .bg-neutral-950,
+html.light .dark\:bg-\[\#090B0E\] {
+  background-color: #F8FAFC !important;
+}
+
+/* Elevated Cards & Modals */
+html.light .bg-\[\#12161C\],
+html.light .bg-\[\#0F1318\]\/95 {
+  background-color: #FFFFFF !important;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.04) !important;
+}
+
+/* Sub-cards, Wells, Rows & Inner Groupings */
+html.light .bg-\[\#0D1117\],
+html.light .bg-\[\#0D1117\]\/95,
+html.light .bg-\[\#0B0E13\],
+html.light .bg-\[\#0F1318\] {
+  background-color: #F8FAFC !important;
+}
+
+html.light .bg-\[\#14181F\],
+html.light .bg-\[\#141A22\],
+html.light .bg-\[\#0A0D12\] {
+  background-color: #F1F5F9 !important;
+}
+
+/* Header & Nav Backdrops in Light Mode */
+html.light header.bg-\[\#090B0E\]\/85 {
+  background-color: rgba(248, 250, 252, 0.9) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+html.light nav.bg-\[\#090B0E\]\/90 {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Subtle Borders */
+html.light .border-white\/5,
+html.light .border-white\/10,
+html.light .border-white\/15,
+html.light .border-white\/20 {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Text Hierarchy & Colors */
+html.light .text-white,
+html.light .text-\[\#F8FAFC\] {
+  color: #0F172A !important;
+}
+
+html.light .text-neutral-100,
+html.light .text-neutral-200,
+html.light .text-slate-100 {
+  color: #1E293B !important;
+}
+
+html.light .text-neutral-300,
+html.light .text-neutral-400 {
+  color: #475569 !important;
+}
+
+html.light .text-neutral-500 {
+  color: #64748B !important;
+}
+
+/* Interactive Chips, Secondary Buttons & Pill Badges */
+html.light .bg-white\/\[0\.03\],
+html.light .bg-white\/\[0\.04\],
+html.light .bg-white\/\[0\.05\],
+html.light .bg-white\/\[0\.06\],
+html.light .bg-white\/\[0\.08\] {
+  background-color: #F1F5F9 !important;
+  color: #1E293B !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+html.light .hover\:bg-white\/\[0\.08\]:hover,
+html.light .hover\:bg-white\/\[0\.09\]:hover,
+html.light .hover\:bg-white\/5:hover,
+html.light .hover\:bg-white\/10:hover {
+  background-color: #E2E8F0 !important;
+  color: #0F172A !important;
+}
+
+/* Form Inputs in Light Mode */
+html.light input[type="text"],
+html.light input[type="email"],
+html.light input[type="password"],
+html.light input[type="number"],
+html.light textarea,
+html.light select {
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+  border-color: rgba(0, 0, 0, 0.14) !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #94A3B8 !important;
+}
+
+/* Gradient Action Banners in Light Mode */
+html.light .bg-gradient-to-r.from-\[\#00D1FF\]\/10.via-\[\#12161C\].to-\[\#0077FF\]\/10 {
+  background-image: linear-gradient(to right, rgba(2, 132, 199, 0.08), #FFFFFF, rgba(0, 119, 255, 0.08)) !important;
+  border-color: rgba(2, 132, 199, 0.25) !important;
+}
+
+html.light .bg-gradient-to-r.from-\[\#12161C\].via-\[\#141B24\].to-\[\#101720\] {
+  background-image: linear-gradient(to right, #FFFFFF, #F0F9FF, #FFFFFF) !important;
+  border-color: rgba(2, 132, 199, 0.3) !important;
+}
+
+/* AI Coach Message Bubbles in Light Mode */
+html.light .bg-\[\#090B0E\].text-\[\#F8FAFC\] {
+  background-color: #F1F5F9 !important;
+  color: #0F172A !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Safe area insets support for modern smartphones */
 .safe-area-pt {
   padding-top: max(1rem, env(safe-area-inset-top, 0px));
 }
@@ -84,11 +216,15 @@
 }
 
 html.light ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(0, 0, 0, 0.18);
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 209, 255, 0.4);
+}
+
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: rgba(2, 132, 199, 0.5);
 }
 
 /* Hide scrollbar utility */
@@ -107,7 +243,7 @@ html.light ::-webkit-scrollbar-thumb {
   }
 }
 
-/* Leaflet Map Dark Styling & Custom Markers */
+/* Leaflet Map Styling for Dark and Light Modes */
 .leaflet-container {
   background-color: #090B0E !important;
   font-family: var(--font-sans);
@@ -116,9 +252,18 @@ html.light ::-webkit-scrollbar-thumb {
   height: 100%;
 }
 
-/* Dark tile filter for OpenStreetMap in dark theme */
-html:not(.light) .dark-tiles .leaflet-tile-pane {
+html.light .leaflet-container {
+  background-color: #F8FAFC !important;
+}
+
+/* Dark tile filter for OpenStreetMap in dark theme only */
+html:not(.light) .dark-tiles .leaflet-tile-pane,
+html.dark .dark-tiles .leaflet-tile-pane {
   filter: brightness(0.65) invert(1) contrast(3.5) hue-rotate(200deg) saturate(0.25) brightness(0.85);
+}
+
+html.light .dark-tiles .leaflet-tile-pane {
+  filter: none !important;
 }
 
 .leaflet-control-zoom {
@@ -128,6 +273,11 @@ html:not(.light) .dark-tiles .leaflet-tile-pane {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
 }
 
+html.light .leaflet-control-zoom {
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
+}
+
 .leaflet-control-zoom a {
   background-color: #12161C !important;
   color: #F8FAFC !important;
@@ -135,9 +285,20 @@ html:not(.light) .dark-tiles .leaflet-tile-pane {
   transition: background-color 0.15s ease;
 }
 
+html.light .leaflet-control-zoom a {
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
 .leaflet-control-zoom a:hover {
   background-color: #181E26 !important;
   color: #00D1FF !important;
+}
+
+html.light .leaflet-control-zoom a:hover {
+  background-color: #F1F5F9 !important;
+  color: #0284C7 !important;
 }
 
 .leaflet-control-attribution {
@@ -148,8 +309,17 @@ html:not(.light) .dark-tiles .leaflet-tile-pane {
   backdrop-filter: blur(8px);
 }
 
+html.light .leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.85) !important;
+  color: #64748B !important;
+}
+
 .leaflet-control-attribution a {
   color: #94A3B8 !important;
+}
+
+html.light .leaflet-control-attribution a {
+  color: #475569 !important;
 }
 
 .leaflet-popup-content-wrapper {
@@ -161,9 +331,17 @@ html:not(.light) .dark-tiles .leaflet-tile-pane {
   padding: 0 !important;
 }
 
+html.light .leaflet-popup-content-wrapper {
+  background: #FFFFFF !important;
+  color: #0F172A !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12) !important;
+}
+
 .leaflet-popup-tip {
   background: #12161C !important;
 }
 
-
-
+html.light .leaflet-popup-tip {
+  background: #FFFFFF !important;
+}

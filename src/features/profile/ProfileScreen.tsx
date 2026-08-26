@@ -37,6 +37,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
 
   const [tempGoal, setTempGoal] = useState<number>(hydrationGoal);
   const [isSavedGoal, setIsSavedGoal] = useState<boolean>(false);
+  const [isChangeBottleModalOpen, setIsChangeBottleModalOpen] = useState<boolean>(false);
+  const [changeBottleError, setChangeBottleError] = useState<string>('');
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState<boolean>(false);
   const [deletePassword, setDeletePassword] = useState<string>('');
@@ -158,28 +160,22 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
             </div>
 
             <button
-              onClick={async () => {
-                if (isReleasingBottle) return;
-                setIsReleasingBottle(true);
-                try {
-                  await unpairBottle();
-                  onChangeBottle();
-                } finally {
-                  setIsReleasingBottle(false);
-                }
+              onClick={() => {
+                setChangeBottleError('');
+                setIsChangeBottleModalOpen(true);
               }}
               disabled={isReleasingBottle}
               className="flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-white/[0.06] hover:bg-[#00D1FF]/15 text-white hover:text-[#00D1FF] border border-white/10 hover:border-[#00D1FF]/30 text-xs font-medium transition-all shadow-sm touch-target sm:min-h-0 sm:min-w-0 disabled:opacity-50"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isReleasingBottle ? 'animate-spin' : ''}`} />
-              <span>{isReleasingBottle ? 'Releasing...' : 'Change'}</span>
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Change</span>
             </button>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-xs">
             <div className="p-3 sm:p-3.5 rounded-2xl bg-[#090B0E] border border-white/5">
               <span className="text-[9px] sm:text-[10px] text-neutral-500 uppercase tracking-wider block mb-0.5">BOTTLE ID</span>
-              <span className="font-mono font-semibold text-white truncate block">{bottle?.bottleId || user?.bottleId || 'ASX-9821-4402'}</span>
+              <span className="font-mono font-semibold text-white truncate block">{bottle?.bottleId || user?.bottleId || 'Not connected'}</span>
             </div>
             <div className="p-3 sm:p-3.5 rounded-2xl bg-[#090B0E] border border-white/5">
               <span className="text-[9px] sm:text-[10px] text-neutral-500 uppercase tracking-wider block mb-0.5">STATUS</span>
@@ -361,22 +357,48 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
             <span className="text-[10px] sm:text-xs text-neutral-500 font-mono">AquaSense Core v2.4</span>
           </div>
 
-          <div className="flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-[#090B0E] border border-white/5 gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-[#090B0E] border border-white/5 gap-3">
             <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-              {theme === 'dark' ? <Moon className="w-4 h-4 text-[#00D1FF] shrink-0" /> : <Sun className="w-4 h-4 text-amber-400 shrink-0" />}
+              <div className="w-8 h-8 rounded-xl bg-[#00D1FF]/10 border border-[#00D1FF]/20 flex items-center justify-center shrink-0">
+                {theme === 'dark' ? <Moon className="w-4 h-4 text-[#00D1FF]" /> : <Sun className="w-4 h-4 text-amber-500" />}
+              </div>
               <div className="min-w-0">
-                <p className="text-xs font-semibold text-white">Theme</p>
-                <p className="text-[11px] text-neutral-400 truncate">
-                  {theme === 'dark' ? 'Interface Charcoal (Default)' : 'Refined Light Canvas'}
+                <p className="text-xs sm:text-sm font-semibold text-white">Appearance Theme</p>
+                <p className="text-[11px] text-neutral-400">
+                  {theme === 'dark' ? 'Interface Charcoal (Dark)' : 'Refined Light Canvas'}
                 </p>
               </div>
             </div>
-            <button
-              onClick={toggleTheme}
-              className="px-3.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-xs font-medium text-white hover:bg-white/[0.08] hover:border-white/20 shrink-0 touch-target sm:min-h-0 sm:min-w-0 transition-all"
-            >
-              Toggle {theme === 'dark' ? 'Light' : 'Dark'}
-            </button>
+            
+            {/* Segmented Theme Switcher */}
+            <div className="flex items-center p-1 rounded-xl bg-white/[0.04] border border-white/10 shrink-0 self-start sm:self-auto">
+              <button
+                type="button"
+                id="btn-theme-dark"
+                onClick={() => { if (theme !== 'dark') toggleTheme(); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  theme === 'dark'
+                    ? 'bg-[#00D1FF] text-[#090B0E] font-semibold shadow-md shadow-[#00D1FF]/20'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                <Moon className="w-3.5 h-3.5" />
+                <span>Dark</span>
+              </button>
+              <button
+                type="button"
+                id="btn-theme-light"
+                onClick={() => { if (theme !== 'light') toggleTheme(); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  theme === 'light'
+                    ? 'bg-[#0284C7] text-white font-semibold shadow-md shadow-[#0284C7]/20'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                <Sun className="w-3.5 h-3.5" />
+                <span>Light</span>
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-[#090B0E] border border-white/5">
@@ -408,6 +430,89 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
         </div>
       </div>
 
+      {/* Change Bottle Confirmation Modal */}
+      <AnimatePresence>
+        {isChangeBottleModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="w-full sm:max-w-md bg-[#12161C] border-t sm:border border-[#00D1FF]/30 rounded-t-[28px] sm:rounded-[32px] p-5 sm:p-6 shadow-2xl space-y-4 safe-area-pb"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#00D1FF]/15 text-[#00D1FF] flex items-center justify-center shrink-0">
+                  <RefreshCw className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-semibold text-white">Change Paired Bottle</h3>
+                  <p className="text-[11px] text-neutral-400">Release device and pair another</p>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-[#090B0E] border border-white/5 space-y-1">
+                <span className="text-[10px] text-neutral-500 uppercase tracking-wider block">CURRENT BOTTLE</span>
+                <span className="font-mono font-semibold text-[#00D1FF] text-sm block">
+                  {bottle?.bottleId || user?.bottleId || 'ASX-XXXX-XXXX'}
+                </span>
+              </div>
+
+              <p className="text-xs text-neutral-300 leading-relaxed">
+                Confirming will atomically release this bottle from your profile so you can pair another registered AquaSense X device. Your hydration history and personal profile will remain preserved.
+              </p>
+
+              {changeBottleError && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{changeBottleError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  disabled={isReleasingBottle}
+                  onClick={() => {
+                    setIsChangeBottleModalOpen(false);
+                    setChangeBottleError('');
+                  }}
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-medium text-neutral-300 hover:text-white bg-white/[0.04] disabled:opacity-50 touch-target"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isReleasingBottle}
+                  onClick={async () => {
+                    setChangeBottleError('');
+                    setIsReleasingBottle(true);
+                    try {
+                      await unpairBottle();
+                      setIsChangeBottleModalOpen(false);
+                      onChangeBottle();
+                    } catch (err: any) {
+                      setChangeBottleError(err.message || 'Failed to release bottle. Please try again.');
+                    } finally {
+                      setIsReleasingBottle(false);
+                    }
+                  }}
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-[#00D1FF] hover:bg-[#00B4D8] text-[#090B0E] text-xs font-semibold transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-lg shadow-[#00D1FF]/20 touch-target"
+                >
+                  {isReleasingBottle ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Releasing...</span>
+                    </>
+                  ) : (
+                    <span>Confirm & Change</span>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Delete Account Confirmation Modal / Responsive Bottom Sheet */}
       <AnimatePresence>
         {isDeleteModalOpen && (
@@ -423,14 +528,21 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
                   <AlertTriangle className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm sm:text-base font-semibold text-white">Delete AquaSense Account?</h3>
-                  <p className="text-[11px] text-neutral-400">Irreversible action</p>
+                  <h3 className="text-sm sm:text-base font-semibold text-white">Delete account and all data?</h3>
+                  <p className="text-[11px] text-neutral-400">Irreversible permanent action</p>
                 </div>
               </div>
 
-              <p className="text-xs text-neutral-300 leading-relaxed">
-                This will permanently delete your user profile, release your paired bottle association, and wipe all hydration logs from Cloud Firestore.
-              </p>
+              <div className="p-3.5 rounded-2xl bg-rose-500/[0.06] border border-rose-500/20 space-y-2 text-xs text-neutral-300">
+                <p className="font-semibold text-rose-300">The following will be permanently removed:</p>
+                <ul className="list-disc list-inside space-y-1 text-[11px] text-neutral-400">
+                  <li>Your user account profile and credentials</li>
+                  <li>Paired bottle association & sensor logs</li>
+                  <li>All personal hydration and intake history</li>
+                  <li>Community water source reports & verification marks</li>
+                  <li>Notification preferences & saved chat history</li>
+                </ul>
+              </div>
 
               {/* Error Alert */}
               <AnimatePresence>
@@ -527,7 +639,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
                     setDeleteError('');
                     setDeletePassword('');
                   }}
-                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-medium text-neutral-300 hover:text-white bg-white/[0.04] disabled:opacity-50"
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-medium text-neutral-300 hover:text-white bg-white/[0.04] disabled:opacity-50 touch-target"
                 >
                   Cancel
                 </button>
@@ -549,7 +661,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
                       setIsDeletingAccount(false);
                     }
                   }}
-                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-lg shadow-rose-500/20"
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-lg shadow-rose-500/20 touch-target"
                 >
                   {isDeletingAccount ? (
                     <>

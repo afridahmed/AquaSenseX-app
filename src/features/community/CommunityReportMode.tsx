@@ -367,7 +367,7 @@ export const CommunityReportMode: React.FC<CommunityReportModeProps> = ({
     try {
       const newReport = await createCommunityReport({
         uid: user.uid,
-        bottleId: bottle?.bottleId || user.bottleId || 'ASX-9821-4402',
+        bottleId: bottle?.bottleId || user.bottleId || '',
         authorName: user.name || 'AquaSense Contributor',
         sourceName: sourceName.trim() || placeName || 'Community Water Source',
         sourceType,
