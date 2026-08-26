@@ -2,19 +2,32 @@ import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { CommunityReport } from '../../types';
 
-export interface ExplorationLocation {
+export interface DeviceLocationState {
+  lat: number;
+  lon: number;
+  accuracy?: number;
+}
+
+export interface SearchLocationState {
   lat: number;
   lon: number;
   label?: string;
-  source?: 'search' | 'map_click';
+}
+
+export interface ExplorationLocationState {
+  lat: number;
+  lon: number;
+  label?: string;
+  source?: 'device' | 'search' | 'map_click';
 }
 
 interface LeafletCommunityMapProps {
   reports: CommunityReport[];
   selectedReport: CommunityReport | null;
   onSelectReport: (report: CommunityReport) => void;
-  userLocation: { lat: number; lon: number } | null;
-  exploreLocation?: ExplorationLocation | null;
+  deviceLocation?: DeviceLocationState | null;
+  searchLocation?: SearchLocationState | null;
+  explorationLocation?: ExplorationLocationState | null;
   onMapClick?: (lat: number, lon: number) => void;
   center?: [number, number];
   zoom?: number;
@@ -24,8 +37,9 @@ export const LeafletCommunityMap: React.FC<LeafletCommunityMapProps> = ({
   reports,
   selectedReport,
   onSelectReport,
-  userLocation,
-  exploreLocation = null,
+  deviceLocation = null,
+  searchLocation = null,
+  explorationLocation = null,
   onMapClick,
   center = [37.7749, -122.4194],
   zoom = 13,
@@ -33,15 +47,19 @@ export const LeafletCommunityMap: React.FC<LeafletCommunityMapProps> = ({
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
-  const userMarkerRef = useRef<L.Marker | null>(null);
-  const exploreMarkerRef = useRef<L.Marker | null>(null);
-  const onMapClickRef = useRef(onMapClick);
+  
+  // Dedicated layer / refs for special markers
+  const deviceMarkerRef = useRef<L.Marker | null>(null);
+  const accuracyCircleRef = useRef<L.Circle | null>(null);
+  const searchMarkerRef = useRef<L.Marker | null>(null);
+  const explorationMarkerRef = useRef<L.Marker | null>(null);
 
+  const onMapClickRef = useRef(onMapClick);
   useEffect(() => {
     onMapClickRef.current = onMapClick;
   }, [onMapClick]);
 
-  // Helper to get color info based on score
+  // Helper for score badge colors
   const getMarkerColor = (score: number) => {
     if (score >= 88) return { hex: '#00D1FF', ring: 'rgba(0, 209, 255, 0.4)', bg: '#00D1FF' };
     if (score >= 70) return { hex: '#10B981', ring: 'rgba(16, 185, 129, 0.4)', bg: '#10B981' };
@@ -56,12 +74,16 @@ export const LeafletCommunityMap: React.FC<LeafletCommunityMapProps> = ({
 
     let initialLat = center[0];
     let initialLon = center[1];
-    if (exploreLocation) {
-      initialLat = exploreLocation.lat;
-      initialLon = exploreLocation.lon;
-    } else if (userLocation) {
-      initialLat = userLocation.lat;
-      initialLon = userLocation.lon;
+    
+    if (explorationLocation) {
+      initialLat = explorationLocation.lat;
+      initialLon = explorationLocation.lon;
+    } else if (searchLocation) {
+      initialLat = searchLocation.lat;
+      initialLon = searchLocation.lon;
+    } else if (deviceLocation) {
+      initialLat = deviceLocation.lat;
+      initialLon = deviceLocation.lon;
     } else if (reports.length > 0 && typeof reports[0].latitude === 'number' && typeof reports[0].longitude === 'number') {
       initialLat = reports[0].latitude;
       initialLon = reports[0].longitude;
@@ -87,14 +109,14 @@ export const LeafletCommunityMap: React.FC<LeafletCommunityMapProps> = ({
     markersLayerRef.current = markersLayer;
     mapInstanceRef.current = map;
 
-    // Handle map click for location exploration
+    // Map click for exploration
     map.on('click', (e: L.LeafletMouseEvent) => {
       if (onMapClickRef.current) {
         onMapClickRef.current(e.latlng.lat, e.latlng.lng);
       }
     });
 
-    // Handle container resize
+    // Container resize observer
     const resizeObserver = new ResizeObserver(() => {
       map.invalidateSize();
     });
@@ -107,48 +129,67 @@ export const LeafletCommunityMap: React.FC<LeafletCommunityMapProps> = ({
     };
   }, []);
 
-  // 2. Update Map Center when selectedReport changes
+  // 2. Center transition when selectedReport changes
   useEffect(() => {
-    if (!mapInstanceRef.current) return;
-    if (selectedReport) {
-      mapInstanceRef.current.flyTo([selectedReport.latitude, selectedReport.longitude], 14, {
-        duration: 0.8,
-      });
-    }
-  }, [selectedReport?.id]);
-
-  // 3. Update Map Center when exploreLocation changes
-  useEffect(() => {
-    if (!mapInstanceRef.current || !exploreLocation) return;
-    mapInstanceRef.current.flyTo([exploreLocation.lat, exploreLocation.lon], 14, {
+    if (!mapInstanceRef.current || !selectedReport) return;
+    mapInstanceRef.current.flyTo([selectedReport.latitude, selectedReport.longitude], 14, {
       duration: 0.8,
     });
-  }, [exploreLocation?.lat, exploreLocation?.lon]);
+  }, [selectedReport?.id]);
 
-  // 4. Render / Update User Location Pin (Real GPS)
+  // 3. Center transition when searchLocation changes
+  useEffect(() => {
+    if (!mapInstanceRef.current || !searchLocation) return;
+    mapInstanceRef.current.flyTo([searchLocation.lat, searchLocation.lon], 14, {
+      duration: 0.8,
+    });
+  }, [searchLocation?.lat, searchLocation?.lon]);
+
+  // 4. Center transition when explorationLocation changes
+  useEffect(() => {
+    if (!mapInstanceRef.current || !explorationLocation) return;
+    mapInstanceRef.current.flyTo([explorationLocation.lat, explorationLocation.lon], 14, {
+      duration: 0.8,
+    });
+  }, [explorationLocation?.lat, explorationLocation?.lon]);
+
+  // 5. Center transition when deviceLocation changes (and no exploration active)
+  useEffect(() => {
+    if (!mapInstanceRef.current || !deviceLocation || explorationLocation || searchLocation) return;
+    mapInstanceRef.current.flyTo([deviceLocation.lat, deviceLocation.lon], 14, {
+      duration: 0.8,
+    });
+  }, [deviceLocation?.lat, deviceLocation?.lon]);
+
+  // 6. Render Device Location Pin & Accuracy Circle (Blue Marker)
   useEffect(() => {
     if (!mapInstanceRef.current) return;
 
-    if (userMarkerRef.current) {
-      userMarkerRef.current.remove();
-      userMarkerRef.current = null;
+    if (deviceMarkerRef.current) {
+      deviceMarkerRef.current.remove();
+      deviceMarkerRef.current = null;
+    }
+    if (accuracyCircleRef.current) {
+      accuracyCircleRef.current.remove();
+      accuracyCircleRef.current = null;
     }
 
-    if (userLocation) {
-      const userIcon = L.divIcon({
-        className: 'custom-user-pin',
+    if (deviceLocation) {
+      // Blue pulsing GPS pin
+      const deviceIcon = L.divIcon({
+        className: 'custom-gps-pin',
         html: `
-          <div style="position: relative; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;">
-            <div style="position: absolute; width: 28px; height: 28px; border-radius: 9999px; background: rgba(0, 209, 255, 0.25); animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
-            <div style="width: 14px; height: 14px; border-radius: 9999px; background: #00D1FF; border: 2.5px solid #FFFFFF; box-shadow: 0 0 14px #00D1FF;"></div>
+          <div style="position: relative; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;">
+            <div style="position: absolute; width: 30px; height: 30px; border-radius: 9999px; background: rgba(0, 209, 255, 0.28); animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+            <div style="width: 14px; height: 14px; border-radius: 9999px; background: #00D1FF; border: 2.5px solid #FFFFFF; box-shadow: 0 0 16px #00D1FF;"></div>
           </div>
         `,
-        iconSize: [28, 28],
-        iconAnchor: [14, 14],
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
       });
 
-      const marker = L.marker([userLocation.lat, userLocation.lon], {
-        icon: userIcon,
+      const marker = L.marker([deviceLocation.lat, deviceLocation.lon], {
+        icon: deviceIcon,
         zIndexOffset: 1000,
       });
       marker.bindTooltip('Your Current GPS Location', {
@@ -157,22 +198,104 @@ export const LeafletCommunityMap: React.FC<LeafletCommunityMapProps> = ({
         offset: [0, -10],
       });
       marker.addTo(mapInstanceRef.current);
-      userMarkerRef.current = marker;
-    }
-  }, [userLocation?.lat, userLocation?.lon]);
+      deviceMarkerRef.current = marker;
 
-  // 5. Render / Update Exploration Location Pin (Search / Map Click)
+      // Render accuracy circle if accuracy is known and sensible
+      if (typeof deviceLocation.accuracy === 'number' && deviceLocation.accuracy > 0 && deviceLocation.accuracy < 5000) {
+        const circle = L.circle([deviceLocation.lat, deviceLocation.lon], {
+          radius: deviceLocation.accuracy,
+          color: '#00D1FF',
+          fillColor: '#00D1FF',
+          fillOpacity: 0.1,
+          weight: 1.5,
+          dashArray: '4, 4',
+        }).addTo(mapInstanceRef.current);
+        accuracyCircleRef.current = circle;
+      }
+    }
+  }, [deviceLocation?.lat, deviceLocation?.lon, deviceLocation?.accuracy]);
+
+  // 7. Render Search Location Pin (Subtle Contrasting Amber/Gold Marker)
   useEffect(() => {
     if (!mapInstanceRef.current) return;
 
-    if (exploreMarkerRef.current) {
-      exploreMarkerRef.current.remove();
-      exploreMarkerRef.current = null;
+    if (searchMarkerRef.current) {
+      searchMarkerRef.current.remove();
+      searchMarkerRef.current = null;
     }
 
-    if (exploreLocation) {
-      const isSearch = exploreLocation.source === 'search';
-      const labelText = exploreLocation.label || (isSearch ? 'Searched Location' : 'Selected Map Point');
+    if (searchLocation) {
+      const searchIcon = L.divIcon({
+        className: 'custom-search-pin',
+        html: `
+          <div style="
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transform: translateY(-50%);
+          ">
+            <div style="
+              width: 32px;
+              height: 32px;
+              border-radius: 9999px;
+              background: #181E26;
+              border: 2px solid #F59E0B;
+              box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7), 0 0 14px rgba(245, 158, 11, 0.6);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: #F59E0B;
+            ">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+            </div>
+            <div style="
+              margin-top: 3px;
+              background: rgba(24, 30, 38, 0.95);
+              border: 1px solid rgba(245, 158, 11, 0.4);
+              padding: 2px 7px;
+              border-radius: 8px;
+              font-size: 10px;
+              font-weight: 700;
+              color: #FCD34D;
+              white-space: nowrap;
+              max-width: 140px;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+            ">
+              ${searchLocation.label || 'Search Location'}
+            </div>
+          </div>
+        `,
+        iconSize: [32, 48],
+        iconAnchor: [16, 16],
+      });
+
+      const marker = L.marker([searchLocation.lat, searchLocation.lon], {
+        icon: searchIcon,
+        zIndexOffset: 950,
+      });
+      marker.addTo(mapInstanceRef.current);
+      searchMarkerRef.current = marker;
+    }
+  }, [searchLocation?.lat, searchLocation?.lon, searchLocation?.label]);
+
+  // 8. Render Selected Exploration Pin (Distinct Emerald/Cyan Accent)
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+
+    if (explorationMarkerRef.current) {
+      explorationMarkerRef.current.remove();
+      explorationMarkerRef.current = null;
+    }
+
+    if (explorationLocation) {
+      const isClick = explorationLocation.source === 'map_click';
+      const labelText = explorationLocation.label || (isClick ? 'Exploration Pin' : 'Selected Location');
 
       const exploreIcon = L.divIcon({
         className: 'custom-explore-pin',
@@ -188,13 +311,13 @@ export const LeafletCommunityMap: React.FC<LeafletCommunityMapProps> = ({
               width: 32px;
               height: 32px;
               border-radius: 9999px;
-              background: #181E26;
-              border: 2px solid #F59E0B;
-              box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7), 0 0 12px rgba(245, 158, 11, 0.5);
+              background: #12161C;
+              border: 2px solid #10B981;
+              box-shadow: 0 4px 16px rgba(0, 0, 0, 0.8), 0 0 14px rgba(16, 185, 129, 0.6);
               display: flex;
               align-items: center;
               justify-content: center;
-              color: #F59E0B;
+              color: #10B981;
             ">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
@@ -203,18 +326,18 @@ export const LeafletCommunityMap: React.FC<LeafletCommunityMapProps> = ({
             </div>
             <div style="
               margin-top: 3px;
-              background: rgba(18, 22, 28, 0.92);
-              border: 1px solid rgba(245, 158, 11, 0.4);
-              padding: 2px 6px;
+              background: rgba(18, 22, 28, 0.95);
+              border: 1px solid rgba(16, 185, 129, 0.4);
+              padding: 2px 7px;
               border-radius: 8px;
               font-size: 10px;
-              font-weight: 600;
-              color: #FCD34D;
+              font-weight: 700;
+              color: #6EE7B7;
               white-space: nowrap;
               max-width: 140px;
               overflow: hidden;
               text-overflow: ellipsis;
-              box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+              box-shadow: 0 2px 8px rgba(0,0,0,0.6);
             ">
               ${labelText}
             </div>
@@ -224,16 +347,16 @@ export const LeafletCommunityMap: React.FC<LeafletCommunityMapProps> = ({
         iconAnchor: [16, 16],
       });
 
-      const marker = L.marker([exploreLocation.lat, exploreLocation.lon], {
+      const marker = L.marker([explorationLocation.lat, explorationLocation.lon], {
         icon: exploreIcon,
-        zIndexOffset: 900,
+        zIndexOffset: 920,
       });
       marker.addTo(mapInstanceRef.current);
-      exploreMarkerRef.current = marker;
+      explorationMarkerRef.current = marker;
     }
-  }, [exploreLocation?.lat, exploreLocation?.lon, exploreLocation?.label, exploreLocation?.source]);
+  }, [explorationLocation?.lat, explorationLocation?.lon, explorationLocation?.label, explorationLocation?.source]);
 
-  // 6. Render Report Markers
+  // 9. Render Community Report Markers
   useEffect(() => {
     if (!mapInstanceRef.current || !markersLayerRef.current) return;
 
@@ -243,23 +366,27 @@ export const LeafletCommunityMap: React.FC<LeafletCommunityMapProps> = ({
       const isSelected = selectedReport?.id === report.id;
       const color = getMarkerColor(report.qualityScore);
 
+      const markerBorder = isSelected ? `2px solid ${color.hex}` : '1px solid rgba(255, 255, 255, 0.15)';
+      const markerBg = isSelected ? '#181E26' : '#12161C';
+      const markerShadow = `0 8px 24px rgba(0,0,0,0.6), 0 0 ${isSelected ? '14px' : '0px'} ${color.ring}`;
+
       const markerHtml = `
         <div style="
           position: relative;
           cursor: pointer;
-          transform: ${isSelected ? 'scale(1.18)' : 'scale(1)'};
+          transform: ${isSelected ? 'scale(1.16)' : 'scale(1)'};
           transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
           z-index: ${isSelected ? 500 : 100};
         ">
           <div style="
             display: flex;
             align-items: center;
-            gap: 5px;
-            padding: 4px 8px;
-            border-radius: 14px;
-            background: ${isSelected ? '#181E26' : '#12161C'};
-            border: ${isSelected ? `2px solid ${color.hex}` : '1px solid rgba(255, 255, 255, 0.15)'};
-            box-shadow: 0 8px 24px rgba(0,0,0,0.6), 0 0 ${isSelected ? '14px' : '0px'} ${color.ring};
+            gap: 4px;
+            padding: 3px 7px;
+            border-radius: 12px;
+            background: ${markerBg};
+            border: ${markerBorder};
+            box-shadow: ${markerShadow};
             backdrop-filter: blur(8px);
             color: #FFFFFF;
             font-family: var(--font-sans);
@@ -268,14 +395,14 @@ export const LeafletCommunityMap: React.FC<LeafletCommunityMapProps> = ({
             white-space: nowrap;
           ">
             <span style="
-              width: 8px;
-              height: 8px;
+              width: 7px;
+              height: 7px;
               border-radius: 9999px;
               background-color: ${color.bg};
               box-shadow: 0 0 6px ${color.bg};
               flex-shrink: 0;
             "></span>
-            <span>${report.qualityScore}</span>
+            <span style="color: #FFFFFF;">${report.qualityScore}</span>
           </div>
         </div>
       `;
@@ -299,7 +426,7 @@ export const LeafletCommunityMap: React.FC<LeafletCommunityMapProps> = ({
   }, [reports, selectedReport?.id]);
 
   return (
-    <div className="w-full h-full relative rounded-[24px] sm:rounded-[28px] overflow-hidden">
+    <div className="w-full h-full relative rounded-[22px] sm:rounded-[26px] overflow-hidden">
       <div ref={mapContainerRef} className="w-full h-full min-h-[320px] xs:min-h-[380px] sm:min-h-[460px] lg:min-h-[560px]" />
     </div>
   );

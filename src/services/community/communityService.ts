@@ -1,15 +1,10 @@
 import {
   collection,
   doc,
-  getDocs,
   addDoc,
-  updateDoc,
-  deleteDoc,
+  setDoc,
   serverTimestamp,
   runTransaction,
-  query,
-  orderBy,
-  limit,
 } from 'firebase/firestore';
 import { db } from '../firebase/firebaseConfig';
 import { CommunityReport } from '../../types';
@@ -44,6 +39,7 @@ export async function createCommunityReport(
   const fullData = {
     ...reportData,
     verifiedReports: 1, // Author starts with initial verification
+    verifiedCount: 1,
     verifiedUids: [reportData.uid],
     createdAt: now.toISOString(),
     lastTestedAt: 'Just now',
@@ -57,11 +53,9 @@ export async function createCommunityReport(
   // Also create subcollection record for the author's verification
   try {
     const verifRef = doc(db, 'communityReports', docRef.id, 'verifications', reportData.uid);
-    await updateDoc(verifRef, {
+    await setDoc(verifRef, {
       uid: reportData.uid,
-      timestamp: now.toISOString(),
-    }).catch(() => {
-      // Subcollection create via setDoc
+      verifiedAt: now.toISOString(),
     });
   } catch {
     // Non-blocking
@@ -71,6 +65,7 @@ export async function createCommunityReport(
     id: docRef.id,
     ...reportData,
     verifiedReports: 1,
+    verifiedCount: 1,
     userHasVerified: true,
     createdAt: now.toISOString(),
     lastTestedAt: 'Just now',
@@ -79,22 +74,71 @@ export async function createCommunityReport(
 
 /**
  * Atomically toggles verification for a community report (1 verification per user)
+ * Writes to both the parent report aggregate counters and the per-user subcollection
  */
 export async function toggleReportVerification(
   reportId: string,
-  userUid: string
+  userUid: string,
+  fallbackReport?: Partial<CommunityReport>
 ): Promise<{ verifiedReports: number; userHasVerified: boolean }> {
   const reportRef = doc(db, 'communityReports', reportId);
+  const verifRef = doc(db, 'communityReports', reportId, 'verifications', userUid);
 
   return await runTransaction(db, async (transaction) => {
     const snap = await transaction.get(reportRef);
+    
     if (!snap.exists()) {
-      throw new Error('Community report does not exist.');
+      // If this is an initial starter report not yet committed to Firestore
+      const initialCount = fallbackReport?.verifiedReports ?? 1;
+      const initialUids = Array.isArray(fallbackReport?.verifiedUids) ? fallbackReport.verifiedUids : [];
+      const hasVerified = initialUids.includes(userUid);
+      
+      const newVerifiedUids = hasVerified ? initialUids.filter((u) => u !== userUid) : [...initialUids, userUid];
+      const newCount = hasVerified ? Math.max(0, initialCount - 1) : initialCount + 1;
+
+      transaction.set(reportRef, {
+        id: reportId,
+        uid: fallbackReport?.uid || 'community_seed',
+        bottleId: fallbackReport?.bottleId || 'ASX-9821-4402',
+        authorName: fallbackReport?.authorName || 'Community Member',
+        sourceName: fallbackReport?.sourceName || 'Public Water Source',
+        sourceType: fallbackReport?.sourceType || 'fountain',
+        latitude: fallbackReport?.latitude ?? 37.7749,
+        longitude: fallbackReport?.longitude ?? -122.4194,
+        qualityScore: fallbackReport?.qualityScore ?? 85,
+        temperature: fallbackReport?.temperature ?? 18,
+        tds: fallbackReport?.tds ?? 150,
+        turbidity: fallbackReport?.turbidity ?? 0.5,
+        ph: fallbackReport?.ph ?? 7.2,
+        verifiedReports: newCount,
+        verifiedCount: newCount,
+        verifiedUids: newVerifiedUids,
+        notes: fallbackReport?.notes || '',
+        createdAt: fallbackReport?.createdAt || new Date().toISOString(),
+        serverCreatedAt: serverTimestamp(),
+        serverUpdatedAt: serverTimestamp(),
+      });
+
+      if (hasVerified) {
+        transaction.delete(verifRef);
+      } else {
+        transaction.set(verifRef, {
+          uid: userUid,
+          verifiedAt: new Date().toISOString(),
+        });
+      }
+
+      return {
+        verifiedReports: newCount,
+        userHasVerified: !hasVerified,
+      };
     }
 
     const data = snap.data();
     const verifiedUids: string[] = Array.isArray(data.verifiedUids) ? [...data.verifiedUids] : [];
-    const currentCount = typeof data.verifiedReports === 'number' ? data.verifiedReports : 0;
+    const currentCount = typeof data.verifiedReports === 'number' 
+      ? data.verifiedReports 
+      : (typeof data.verifiedCount === 'number' ? data.verifiedCount : 0);
 
     const hasVerified = verifiedUids.includes(userUid);
     let newVerifiedUids: string[];
@@ -104,14 +148,20 @@ export async function toggleReportVerification(
       // Remove verification
       newVerifiedUids = verifiedUids.filter((uid) => uid !== userUid);
       newCount = Math.max(0, currentCount - 1);
+      transaction.delete(verifRef);
     } else {
       // Add verification
       newVerifiedUids = [...verifiedUids, userUid];
       newCount = currentCount + 1;
+      transaction.set(verifRef, {
+        uid: userUid,
+        verifiedAt: new Date().toISOString(),
+      });
     }
 
     transaction.update(reportRef, {
       verifiedReports: newCount,
+      verifiedCount: newCount,
       verifiedUids: newVerifiedUids,
       serverUpdatedAt: serverTimestamp(),
     });
@@ -141,36 +191,5 @@ export function formatRelativeTime(dateString?: string): string {
   if (diffDays === 1) return 'Tested yesterday';
   if (diffDays < 30) return `Tested ${diffDays}d ago`;
   return `Tested on ${date.toLocaleDateString()}`;
-}
-
-/**
- * Saves a private water quality test into the user's private Firestore subcollection
- * This is NEVER published to the public Community Map
- */
-export async function savePrivateWaterTest(testData: {
-  uid: string;
-  bottleId: string;
-  sourceName: string;
-  sourceType: string;
-  latitude?: number | null;
-  longitude?: number | null;
-  qualityScore: number;
-  temperature: number;
-  tds: number;
-  turbidity: number;
-  ph: number;
-  notes?: string;
-}): Promise<{ id: string }> {
-  const now = new Date();
-  const data = {
-    ...testData,
-    isPrivate: true,
-    createdAt: now.toISOString(),
-    serverCreatedAt: serverTimestamp(),
-  };
-
-  const userTestsRef = collection(db, 'users', testData.uid, 'waterTests');
-  const docRef = await addDoc(userTestsRef, data);
-  return { id: docRef.id };
 }
 

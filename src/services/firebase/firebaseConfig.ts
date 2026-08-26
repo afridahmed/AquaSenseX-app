@@ -31,8 +31,10 @@ export function getFirebaseErrorMessage(error: any): string {
   const message = error.message || '';
 
   switch (code) {
-    case 'auth/invalid-credential':
+    case 'auth/requires-recent-login':
+      return 'Account deletion is a sensitive operation that requires recent authentication. Please confirm your credentials or sign in again to verify.';
     case 'auth/wrong-password':
+    case 'auth/invalid-credential':
     case 'auth/user-not-found':
       return 'Invalid credentials or account not found. If you are a new user, please click "Sign Up" below to create your account.';
     case 'auth/email-already-in-use':
@@ -44,11 +46,11 @@ export function getFirebaseErrorMessage(error: any): string {
     case 'auth/user-disabled':
       return 'This account has been disabled. Please contact AquaSense support.';
     case 'auth/popup-closed-by-user':
-      return 'Sign-in popup was closed before completing authentication.';
+      return 'Verification popup was closed before completing.';
     case 'auth/popup-blocked':
-      return 'Popup was blocked by your browser. Please allow popups for this site.';
+      return 'Popup was blocked by your browser or iframe security settings. You can allow popups or use "Wipe Data & Sign Out" below.';
     case 'auth/cancelled-popup-request':
-      return 'Previous sign-in request was cancelled.';
+      return 'Previous authentication request was cancelled.';
     case 'auth/too-many-requests':
       return 'Access temporarily restricted due to multiple failed attempts. Please try again shortly.';
     case 'auth/network-request-failed':
@@ -60,10 +62,13 @@ export function getFirebaseErrorMessage(error: any): string {
     case 'unavailable':
       return 'AquaSense Cloud service is temporarily unavailable. Please retry in a moment.';
     default:
+      if (message.includes('requires-recent-login')) {
+        return 'Account deletion is a sensitive operation that requires recent authentication. Please verify your credentials to continue.';
+      }
       if (message.includes('network') || message.includes('offline')) {
         return 'Network connection issue. Please check your internet connection.';
       }
-      return 'Unable to complete operation. Please try again.';
+      return message && !message.includes('Firebase:') ? message : 'Unable to complete operation. Please try again.';
   }
 }
 

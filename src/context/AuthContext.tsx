@@ -11,6 +11,9 @@ import {
   sendPasswordResetEmail,
   deleteUser as fbDeleteUser,
   updateProfile as fbUpdateProfile,
+  reauthenticateWithPopup,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
   User as FirebaseUser,
 } from 'firebase/auth';
 import {
@@ -23,6 +26,11 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 
+export interface DeleteAccountOptions {
+  password?: string;
+  forceWipeAndSignOutIfBlocked?: boolean;
+}
+
 interface AuthContextType {
   user: UserProfile | null;
   firebaseUser: FirebaseUser | null;
@@ -34,7 +42,7 @@ interface AuthContextType {
   loginWithGoogle: () => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
-  deleteAccount: () => Promise<void>;
+  deleteAccount: (options?: string | DeleteAccountOptions) => Promise<void>;
   updateUserProfile: (partial: Partial<UserProfile>) => Promise<void>;
   pairBottle: (bottleId: string) => Promise<void>;
   unpairBottle: () => Promise<void>;
@@ -308,15 +316,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Delete account
-  const deleteAccount = async () => {
-    if (!user || !auth.currentUser) return;
+  // Delete account with automatic re-authentication support (Google popup or email password credential)
+  const deleteAccount = async (options?: string | DeleteAccountOptions) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error('No active user session found.');
+    }
+
+    const passwordForReauth = typeof options === 'string' ? options : options?.password;
+    const forceWipeAndSignOutIfBlocked =
+      typeof options === 'object' ? Boolean(options?.forceWipeAndSignOutIfBlocked) : false;
+
     setLoading(true);
     try {
-      const currentUid = user.uid;
-      const currentBottleId = user.bottleId;
+      const currentUid = currentUser.uid;
+      const currentBottleId = user?.bottleId;
+      const isGoogleUser = currentUser.providerData.some(
+        (p) => p.providerId === 'google.com' || p.providerId === googleAuthProvider.providerId
+      );
 
-      // Disassociate bottle if exists and owned by current user
+      // Pre-authenticate if email/password credential provided
+      if (passwordForReauth && currentUser.email && !isGoogleUser) {
+        const credential = EmailAuthProvider.credential(currentUser.email, passwordForReauth);
+        await reauthenticateWithCredential(currentUser, credential);
+      }
+
+      // Step 1: Disassociate bottle if exists and owned by current user
       if (currentBottleId) {
         try {
           const bottleRef = doc(db, 'bottles', currentBottleId);
@@ -335,21 +360,76 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       }
 
-      // Delete user document from Firestore
+      // Step 2: Delete user document from Firestore while authenticated
       try {
         await deleteDoc(doc(db, 'users', currentUid));
       } catch (e) {
         console.warn('Could not delete Firestore user doc:', e);
       }
 
-      // Delete Firebase Auth user
-      await fbDeleteUser(auth.currentUser);
+      // Step 3: Delete Firebase Auth user
+      let authUserDeleted = false;
+      try {
+        await fbDeleteUser(currentUser);
+        authUserDeleted = true;
+      } catch (authErr: any) {
+        const isRecentLoginError =
+          authErr.code === 'auth/requires-recent-login' ||
+          authErr.message?.includes('requires-recent-login');
+
+        if (isRecentLoginError) {
+          if (isGoogleUser) {
+            try {
+              await reauthenticateWithPopup(currentUser, googleAuthProvider);
+              await fbDeleteUser(currentUser);
+              authUserDeleted = true;
+            } catch (popupErr: any) {
+              console.warn('Google re-authentication failed or blocked:', popupErr);
+              if (
+                forceWipeAndSignOutIfBlocked ||
+                popupErr.code === 'auth/popup-blocked' ||
+                popupErr.message?.includes('popup-blocked')
+              ) {
+                // If popup blocked or force wipe requested, sign out so session is terminated cleanly
+                await fbSignOut(auth);
+                authUserDeleted = true;
+              } else {
+                throw popupErr;
+              }
+            }
+          } else if (passwordForReauth && currentUser.email) {
+            const credential = EmailAuthProvider.credential(currentUser.email, passwordForReauth);
+            await reauthenticateWithCredential(currentUser, credential);
+            await fbDeleteUser(currentUser);
+            authUserDeleted = true;
+          } else {
+            if (forceWipeAndSignOutIfBlocked) {
+              await fbSignOut(auth);
+              authUserDeleted = true;
+            } else {
+              throw authErr;
+            }
+          }
+        } else {
+          if (forceWipeAndSignOutIfBlocked) {
+            await fbSignOut(auth);
+            authUserDeleted = true;
+          } else {
+            throw authErr;
+          }
+        }
+      }
+
+      // Step 4: Successfully deleted / cleaned up -> clear app state
+      if (authUserDeleted) {
+        setFirebaseUser(null);
+        setUser(null);
+        setIsPairingModalOpen(false);
+      }
     } catch (error: any) {
       console.error('Account deletion error:', error);
       throw new Error(getFirebaseErrorMessage(error));
     } finally {
-      setFirebaseUser(null);
-      setUser(null);
       setLoading(false);
     }
   };

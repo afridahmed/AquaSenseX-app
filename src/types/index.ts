@@ -75,6 +75,7 @@ export interface CommunityReport {
   turbidity: number;
   ph: number;
   verifiedReports: number;
+  verifiedCount?: number;
   verifiedUids?: string[];
   createdAt: string;
   lastTestedAt: string;
@@ -83,6 +84,10 @@ export interface CommunityReport {
   userHasVerified?: boolean;
   notes?: string;
   distanceKm?: number;
+  originalDeviceLat?: number;
+  originalDeviceLon?: number;
+  gpsAccuracy?: number;
+  adjustmentDistanceMeters?: number;
 }
 
 export type WaterQualityCategory = 'Excellent' | 'Good' | 'Caution' | 'Poor';

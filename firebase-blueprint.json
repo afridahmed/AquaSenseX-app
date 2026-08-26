@@ -82,6 +82,30 @@
         "createdAt": { "type": "string", "description": "Created ISO timestamp" },
         "lastTestedAt": { "type": "string", "description": "Last tested description" }
       }
+    },
+    "WaterTest": {
+      "collection": "users/{userId}/waterTests",
+      "description": "Private water quality test history records strictly owned by the authenticated user",
+      "fields": {
+        "uid": { "type": "string", "description": "Owner User UID" },
+        "bottleId": { "type": "string", "description": "Bottle serial used for test" },
+        "sourceName": { "type": "string", "description": "Tested water source name" },
+        "sourceType": { "type": "string", "description": "Source category (fountain, tap, spring, etc.)" },
+        "latitude": { "type": "number", "description": "GPS latitude" },
+        "longitude": { "type": "number", "description": "GPS longitude" },
+        "qualityScore": { "type": "number", "description": "Overall water quality score" },
+        "temperature": { "type": "number", "description": "Liquid temperature in C" },
+        "tds": { "type": "number", "description": "Total Dissolved Solids in ppm" },
+        "turbidity": { "type": "number", "description": "Turbidity in NTU" },
+        "ph": { "type": "number", "description": "pH level" },
+        "notes": { "type": "string", "description": "Private observation notes" },
+        "isPrivate": { "type": "boolean", "description": "Flag indicating private user test" },
+        "createdAt": { "type": "string", "description": "Test ISO timestamp" }
+      },
+      "rules": {
+        "read": "request.auth != null && request.auth.uid == userId",
+        "write": "request.auth != null && request.auth.uid == userId"
+      }
     }
   }
 }

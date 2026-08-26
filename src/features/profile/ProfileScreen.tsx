@@ -20,6 +20,9 @@ import {
   ChevronRight,
   AlertTriangle,
   Lock,
+  Eye,
+  EyeOff,
+  Loader2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -28,13 +31,17 @@ interface ProfileScreenProps {
 }
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) => {
-  const { user, signOut, deleteAccount, updateUserProfile, unpairBottle } = useAuth();
+  const { user, firebaseUser, signOut, deleteAccount, updateUserProfile, unpairBottle } = useAuth();
   const { bottle, hydrationGoal, updateHydrationGoal } = useBottle();
   const { theme, toggleTheme } = useTheme();
 
   const [tempGoal, setTempGoal] = useState<number>(hydrationGoal);
   const [isSavedGoal, setIsSavedGoal] = useState<boolean>(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState<boolean>(false);
+  const [deletePassword, setDeletePassword] = useState<string>('');
+  const [deleteError, setDeleteError] = useState<string>('');
+  const [showDeletePassword, setShowDeletePassword] = useState<boolean>(false);
   const [isReleasingBottle, setIsReleasingBottle] = useState<boolean>(false);
   const [notificationState, setNotificationState] = useState(
     user?.notifications || {
@@ -387,7 +394,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
 
           <div className="pt-2 flex flex-wrap items-center justify-between gap-3">
             <button
-              onClick={() => setIsDeleteModalOpen(true)}
+              onClick={() => {
+                setDeleteError('');
+                setDeletePassword('');
+                setIsDeleteModalOpen(true);
+              }}
               className="flex items-center gap-1.5 text-xs text-rose-400 hover:text-rose-300 transition-colors touch-target sm:min-h-0 sm:min-w-0"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -405,30 +416,149 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
-              className="w-full sm:max-w-sm bg-[#12161C] border-t sm:border border-rose-500/30 rounded-t-[28px] sm:rounded-[32px] p-5 sm:p-6 shadow-2xl space-y-4 safe-area-pb"
+              className="w-full sm:max-w-md bg-[#12161C] border-t sm:border border-rose-500/30 rounded-t-[28px] sm:rounded-[32px] p-5 sm:p-6 shadow-2xl space-y-4 safe-area-pb max-h-[90vh] overflow-y-auto"
             >
-              <div className="w-10 h-10 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5" />
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-semibold text-white">Delete AquaSense Account?</h3>
+                  <p className="text-[11px] text-neutral-400">Irreversible action</p>
+                </div>
               </div>
-              <h3 className="text-sm sm:text-base font-semibold text-white">Delete AquaSense Account?</h3>
-              <p className="text-xs text-neutral-400 leading-relaxed">
-                This will permanently delete your user profile, paired bottle association, and hydration logs from Cloud Firestore.
+
+              <p className="text-xs text-neutral-300 leading-relaxed">
+                This will permanently delete your user profile, release your paired bottle association, and wipe all hydration logs from Cloud Firestore.
               </p>
-              <div className="flex items-center justify-end gap-2 pt-2">
+
+              {/* Error Alert */}
+              <AnimatePresence>
+                {deleteError && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="p-3 sm:p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex flex-col gap-2"
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      <span className="leading-relaxed">{deleteError}</span>
+                    </div>
+
+                    {/* If popup blocked or sensitive reauth issue, offer immediate data wipe fallback */}
+                    <button
+                      type="button"
+                      disabled={isDeletingAccount}
+                      onClick={async () => {
+                        setIsDeletingAccount(true);
+                        setDeleteError('');
+                        try {
+                          await deleteAccount({ forceWipeAndSignOutIfBlocked: true });
+                          setIsDeleteModalOpen(false);
+                        } catch (err: any) {
+                          setDeleteError(err.message || 'Failed to wipe data. Please try again.');
+                        } finally {
+                          setIsDeletingAccount(false);
+                        }
+                      }}
+                      className="mt-1 w-full py-2 px-3 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-200 text-xs font-semibold text-center transition-colors"
+                    >
+                      Wipe Cloud Data & Sign Out Now
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Account verification notice based on provider */}
+              {firebaseUser?.providerData.some((p) => p.providerId === 'google.com') ? (
+                <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/5 text-[11px] text-neutral-400 flex items-center gap-2">
+                  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
+                    <path
+                      fill="#4285F4"
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                    />
+                  </svg>
+                  <span>Google Account: Re-verification may open or you can wipe and sign out.</span>
+                </div>
+              ) : (
+                <div className="space-y-1.5 pt-1">
+                  <label className="block text-xs font-medium text-neutral-300">
+                    Confirm Account Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-neutral-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type={showDeletePassword ? 'text' : 'password'}
+                      value={deletePassword}
+                      onChange={(e) => setDeletePassword(e.target.value)}
+                      placeholder="Enter your current password"
+                      className="w-full bg-[#090B0E] border border-white/10 rounded-2xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-rose-500/50 transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowDeletePassword(!showDeletePassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white p-1"
+                    >
+                      {showDeletePassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
                 <button
-                  onClick={() => setIsDeleteModalOpen(false)}
-                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-medium text-neutral-300 hover:text-white bg-white/[0.04]"
+                  type="button"
+                  disabled={isDeletingAccount}
+                  onClick={() => {
+                    setIsDeleteModalOpen(false);
+                    setDeleteError('');
+                    setDeletePassword('');
+                  }}
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-medium text-neutral-300 hover:text-white bg-white/[0.04] disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
-                    setIsDeleteModalOpen(false);
-                    deleteAccount();
+                  type="button"
+                  disabled={isDeletingAccount}
+                  onClick={async () => {
+                    setDeleteError('');
+                    setIsDeletingAccount(true);
+                    try {
+                      await deleteAccount({
+                        password: deletePassword.trim() || undefined,
+                        forceWipeAndSignOutIfBlocked: true,
+                      });
+                      setIsDeleteModalOpen(false);
+                    } catch (err: any) {
+                      setDeleteError(err.message || 'Failed to delete account. Please try again.');
+                    } finally {
+                      setIsDeletingAccount(false);
+                    }
                   }}
-                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold transition-colors"
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-lg shadow-rose-500/20"
                 >
-                  Confirm Deletion
+                  {isDeletingAccount ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    <span>Confirm Deletion</span>
+                  )}
                 </button>
               </div>
             </motion.div>
