@@ -43,6 +43,9 @@ import {
   Layers,
   Sparkles,
   Droplets,
+  Waves,
+  Check,
+  ChevronRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -609,6 +612,21 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
     }
   };
 
+  const getSourceIcon = (type?: string) => {
+    switch (type) {
+      case 'filtration_station':
+        return Sparkles;
+      case 'spring':
+        return Waves;
+      case 'well':
+        return Layers;
+      case 'tap':
+      case 'fountain':
+      default:
+        return Droplets;
+    }
+  };
+
   return (
     <div className="space-y-3 sm:space-y-4 lg:space-y-5 pb-24 lg:pb-8 max-w-7xl mx-auto px-3 sm:px-4 lg:px-6">
       <Header />
@@ -1089,27 +1107,41 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
                   filteredAndRankedReports.map((rep) => {
                     const isSelected = selectedReport?.id === rep.id;
                     const scoreInfo = getScoreColor(rep.qualityScore);
+                    const SourceIcon = getSourceIcon(rep.sourceType);
 
                     return (
                       <div
                         key={rep.id}
                         id={`directory-source-${rep.id}`}
                         onClick={() => handleSelectReport(rep)}
-                        className={`p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between touch-target sm:min-h-0 ${
+                        className={`p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 sm:gap-3 touch-target sm:min-h-0 ${
                           isSelected
                             ? 'bg-[#181E26] border-[#00D1FF]/60 shadow-md ring-1 ring-[#00D1FF]/30'
                             : 'bg-[#090B0E] border-white/5 hover:bg-white/[0.04] hover:border-white/15'
                         }`}
                       >
-                        <div className="min-w-0 flex-1 pr-2.5">
-                          <div className="flex items-center gap-1.5">
-                            <p className="text-xs sm:text-sm font-semibold text-white truncate leading-tight">
-                              {rep.sourceName}
-                            </p>
-                          </div>
-                          <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 text-[11px] text-neutral-400 mt-1">
+                        {/* Compact Source Icon Badge */}
+                        <div
+                          className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0 border transition-colors ${
+                            isSelected
+                              ? 'bg-[#00D1FF]/15 border-[#00D1FF]/30 text-[#00D1FF]'
+                              : 'bg-white/[0.04] border-white/10 text-cyan-400/90'
+                          }`}
+                        >
+                          <SourceIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        </div>
+
+                        {/* Primary Content Rows */}
+                        <div className="min-w-0 flex-1">
+                          {/* Row 1: Source Name */}
+                          <p className="text-xs sm:text-sm font-semibold text-white truncate leading-tight">
+                            {rep.sourceName}
+                          </p>
+
+                          {/* Row 2: Quality Category & Distance */}
+                          <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 text-[11px] mt-0.5 leading-tight">
                             <span className={`font-medium ${scoreInfo.text}`}>
-                              {scoreInfo.label} · {rep.qualityScore}
+                              {scoreInfo.label}
                             </span>
                             {rep.distanceKm !== undefined && (
                               <>
@@ -1119,17 +1151,27 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
                                 </span>
                               </>
                             )}
+                          </div>
+
+                          {/* Row 3: Tested Relative Time & Verification Count */}
+                          <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 text-[10px] sm:text-[11px] text-neutral-400 mt-0.5 leading-tight">
+                            <span>Tested {rep.lastTestedAt}</span>
                             <span className="text-neutral-600">•</span>
-                            <span className="text-neutral-500">{rep.lastTestedAt}</span>
+                            <span className="inline-flex items-center gap-0.5 text-emerald-400 font-medium">
+                              <Check className="w-3 h-3 text-emerald-400" />
+                              <span>{rep.verifiedReports || 0} verified</span>
+                            </span>
                           </div>
                         </div>
 
-                        <div className="text-right shrink-0">
+                        {/* Right: Compact Quality Score Badge & Subtle Chevron */}
+                        <div className="text-right shrink-0 flex items-center gap-1.5 sm:gap-2">
                           <span
-                            className={`text-xs font-bold px-2.5 py-1 rounded-lg font-sans inline-block ${scoreInfo.bg}/15 ${scoreInfo.text} border ${scoreInfo.border}`}
+                            className={`text-xs sm:text-sm font-bold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg font-sans inline-block ${scoreInfo.bg}/15 ${scoreInfo.text} border ${scoreInfo.border}`}
                           >
                             {rep.qualityScore}
                           </span>
+                          <ChevronRight className="w-3.5 h-3.5 text-neutral-500 hidden sm:block shrink-0" />
                         </div>
                       </div>
                     );
@@ -1155,10 +1197,11 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
               <div className="flex items-start justify-between gap-3 pb-2.5 border-b border-white/10">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-[#00D1FF]">
-                      Selected Water Source
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-[#00D1FF] whitespace-nowrap">
+                      <span className="sm:hidden">Water Source</span>
+                      <span className="hidden sm:inline">Selected Water Source</span>
                     </span>
-                    <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-white/[0.05] border border-white/10 text-neutral-300">
+                    <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-white/[0.05] border border-white/10 text-neutral-300 shrink-0 whitespace-nowrap">
                       {getSourceTypeLabel(selectedReport.sourceType)}
                     </span>
                   </div>
