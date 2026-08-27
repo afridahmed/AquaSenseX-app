@@ -49,110 +49,6 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-// Starter community dataset with verified real coordinates
-const INITIAL_REPORTS: CommunityReport[] = [
-  {
-    id: 'rep_1',
-    uid: 'usr_sarah',
-    authorName: 'Sarah Jenkins',
-    bottleId: '',
-    latitude: 37.7749,
-    longitude: -122.4194,
-    sourceName: 'Yerba Buena Gardens Water Fountain',
-    sourceType: 'fountain',
-    qualityScore: 94,
-    temperature: 14.8,
-    tds: 142,
-    turbidity: 0.3,
-    ph: 7.4,
-    verifiedReports: 28,
-    verifiedUids: ['usr_sarah'],
-    createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-    lastTestedAt: '2 hours ago',
-    notes: 'Pristine, cold, and rapid flow rate with micro-filtration station.',
-  },
-  {
-    id: 'rep_2',
-    uid: 'usr_marcus',
-    authorName: 'Marcus Vance',
-    bottleId: '',
-    latitude: 37.7833,
-    longitude: -122.4167,
-    sourceName: 'Civic Center Public Hydration Station',
-    sourceType: 'filtration_station',
-    qualityScore: 89,
-    temperature: 16.2,
-    tds: 195,
-    turbidity: 0.5,
-    ph: 7.2,
-    verifiedReports: 14,
-    verifiedUids: ['usr_marcus'],
-    createdAt: new Date(Date.now() - 5 * 3600 * 1000).toISOString(),
-    lastTestedAt: '5 hours ago',
-    notes: 'Good cold tap with UV purification cap.',
-  },
-  {
-    id: 'rep_3',
-    uid: 'usr_elena',
-    authorName: 'Elena Rostova',
-    bottleId: '',
-    latitude: 37.7694,
-    longitude: -122.4467,
-    sourceName: 'Buena Vista Trailhead Rustic Fountain',
-    sourceType: 'tap',
-    qualityScore: 68,
-    temperature: 20.4,
-    tds: 410,
-    turbidity: 1.8,
-    ph: 6.6,
-    verifiedReports: 6,
-    verifiedUids: ['usr_elena'],
-    createdAt: new Date(Date.now() - 18 * 3600 * 1000).toISOString(),
-    lastTestedAt: '18 hours ago',
-    notes: 'Mild metallic taste and higher mineral hardness. Filtration recommended.',
-  },
-  {
-    id: 'rep_4',
-    uid: 'usr_dave',
-    authorName: 'David Kim',
-    bottleId: '',
-    latitude: 37.8014,
-    longitude: -122.4056,
-    sourceName: 'Pier 39 Promenade Chilled Hydration Bar',
-    sourceType: 'filtration_station',
-    qualityScore: 91,
-    temperature: 15.0,
-    tds: 168,
-    turbidity: 0.4,
-    ph: 7.3,
-    verifiedReports: 42,
-    verifiedUids: ['usr_dave'],
-    createdAt: new Date(Date.now() - 28 * 3600 * 1000).toISOString(),
-    lastTestedAt: '1 day ago',
-    notes: 'Chilled bottle refill station with digital purity filter counter.',
-  },
-  {
-    id: 'rep_5',
-    uid: 'usr_sam',
-    authorName: 'Samira Patel',
-    bottleId: '',
-    latitude: 37.7582,
-    longitude: -122.4200,
-    sourceName: 'Mission Dolores Park Outdoor Spigot #2',
-    sourceType: 'fountain',
-    qualityScore: 48,
-    temperature: 23.1,
-    tds: 580,
-    turbidity: 3.9,
-    ph: 6.1,
-    verifiedReports: 9,
-    verifiedUids: ['usr_sam'],
-    createdAt: new Date(Date.now() - 44 * 3600 * 1000).toISOString(),
-    lastTestedAt: '1 day ago',
-    notes: 'Noticeable turbidity and pipe sediment detected by AquaSense X sensor.',
-  },
-];
-
 type CommunityMode = 'explore' | 'report';
 type QualityFilterType = 'all' | 'excellent' | 'good' | 'caution';
 
@@ -171,8 +67,8 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
   const [mode, setMode] = useState<CommunityMode>(initialMode);
 
   // Core Reports State
-  const [reports, setReports] = useState<CommunityReport[]>(INITIAL_REPORTS);
-  const [selectedReport, setSelectedReport] = useState<CommunityReport | null>(INITIAL_REPORTS[0]);
+  const [reports, setReports] = useState<CommunityReport[]>([]);
+  const [selectedReport, setSelectedReport] = useState<CommunityReport | null>(null);
   const [filterQuality, setFilterQuality] = useState<QualityFilterType>('all');
 
   // Mobile Bottom Sheet state for selected source
@@ -217,44 +113,40 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
       const unsubscribe = onSnapshot(
         q,
         (snapshot) => {
-          if (!snapshot.empty) {
-            const list: CommunityReport[] = snapshot.docs.map((docSnap) => {
-              const data = docSnap.data() as Omit<CommunityReport, 'id'>;
-              const hasVerified =
-                user && Array.isArray(data.verifiedUids) ? data.verifiedUids.includes(user.uid) : false;
+          const list: CommunityReport[] = snapshot.docs.map((docSnap) => {
+            const data = docSnap.data() as Omit<CommunityReport, 'id'>;
+            const hasVerified =
+              user && Array.isArray(data.verifiedUids) ? data.verifiedUids.includes(user.uid) : false;
 
-              const count = typeof data.verifiedReports === 'number' 
-                ? data.verifiedReports 
-                : (typeof (data as any).verifiedCount === 'number' ? (data as any).verifiedCount : 0);
+            const count = typeof data.verifiedReports === 'number'
+              ? data.verifiedReports
+              : (typeof (data as any).verifiedCount === 'number' ? (data as any).verifiedCount : 0);
 
-              return {
-                id: docSnap.id,
-                ...data,
-                verifiedReports: count,
-                userHasVerified: hasVerified,
-                lastTestedAt: formatRelativeTime(data.createdAt),
-              };
-            });
+            return {
+              id: docSnap.id,
+              ...data,
+              verifiedReports: count,
+              userHasVerified: hasVerified,
+              lastTestedAt: formatRelativeTime(data.createdAt),
+            };
+          });
 
-            // Merge with initial reports
-            const existingIds = new Set(list.map((r) => r.id));
-            const merged = [
-              ...list,
-              ...INITIAL_REPORTS.filter((r) => !existingIds.has(r.id)),
-            ];
+          setReports(list);
 
-            setReports(merged);
-
-            // Handle initial deep-link selection
-            if (initialSelectedReportId) {
-              const matched = merged.find((r) => r.id === initialSelectedReportId);
-              if (matched) {
-                setSelectedReport(matched);
-                setIsMobileSheetOpen(true);
-              }
-            } else if (!selectedReport && merged.length > 0) {
-              setSelectedReport(merged[0]);
+          // Handle initial deep-link selection or auto-selection
+          if (initialSelectedReportId) {
+            const matched = list.find((r) => r.id === initialSelectedReportId);
+            if (matched) {
+              setSelectedReport(matched);
+              setIsMobileSheetOpen(true);
             }
+          } else {
+            setSelectedReport((prev) => {
+              if (prev && list.some((r) => r.id === prev.id)) {
+                return list.find((r) => r.id === prev.id) || prev;
+              }
+              return list.length > 0 ? list[0] : null;
+            });
           }
         },
         (err) => {
@@ -364,7 +256,7 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
   // Handle Select Search Result
   const handleSelectSearchResult = (result: GeocodingResult) => {
     const label = result.name || result.displayName.split(',')[0];
-    
+
     // 1. Set Search Location
     setSearchLocation({
       lat: result.lat,
@@ -554,7 +446,7 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
 
     try {
       const result = await toggleReportVerification(report.id, user.uid, report);
-      
+
       // Update with exact server transaction results
       setReports((prev) =>
         prev.map((r) =>
@@ -567,10 +459,10 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
         setSelectedReport((prev) =>
           prev
             ? {
-                ...prev,
-                verifiedReports: result.verifiedReports,
-                userHasVerified: result.userHasVerified,
-              }
+              ...prev,
+              verifiedReports: result.verifiedReports,
+              userHasVerified: result.userHasVerified,
+            }
             : null
         );
       }
@@ -638,11 +530,10 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
             id="mode-switch-explore-btn"
             type="button"
             onClick={() => setMode('explore')}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              mode === 'explore'
-                ? 'bg-[#181E26] text-[#00D1FF] border border-[#00D1FF]/40 shadow-sm shadow-[#00D1FF]/15'
-                : 'text-neutral-400 hover:text-white border border-transparent'
-            }`}
+            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${mode === 'explore'
+              ? 'bg-[#181E26] text-[#00D1FF] border border-[#00D1FF]/40 shadow-sm shadow-[#00D1FF]/15'
+              : 'text-neutral-400 hover:text-white border border-transparent'
+              }`}
           >
             <Compass className="w-4 h-4" />
             <span>Explore</span>
@@ -651,11 +542,10 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
             id="mode-switch-report-btn"
             type="button"
             onClick={() => setMode('report')}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              mode === 'report'
-                ? 'bg-[#181E26] text-[#00D1FF] border border-[#00D1FF]/40 shadow-sm shadow-[#00D1FF]/15'
-                : 'text-neutral-400 hover:text-white border border-transparent'
-            }`}
+            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${mode === 'report'
+              ? 'bg-[#181E26] text-[#00D1FF] border border-[#00D1FF]/40 shadow-sm shadow-[#00D1FF]/15'
+              : 'text-neutral-400 hover:text-white border border-transparent'
+              }`}
           >
             <FlaskConical className="w-4 h-4" />
             <span>Report</span>
@@ -681,611 +571,602 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
         />
       ) : (
         <div className="space-y-3 sm:space-y-4">
-        {/* COMPACT RESPONSIVE TOP TOOLBAR (Search, Use My Location, Quality Filters) */}
-        <div className="bg-[#12161C] p-2.5 sm:p-3 rounded-2xl sm:rounded-[24px] border border-white/5 shadow-xl space-y-2.5">
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2 sm:gap-2.5">
-            {/* Search Input with Nominatim Autocomplete */}
-            <div className="relative flex-1 min-w-0">
-              <form onSubmit={handleSearchSubmit} className="relative">
-                <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => handleSearchChange(e.target.value)}
-                  onFocus={() => {
-                    if (searchResults.length > 0) setShowSearchDropdown(true);
-                  }}
-                  placeholder="Search city, park, or source..."
-                  className="w-full bg-[#090B0E] border border-white/10 rounded-xl pl-9 pr-9 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50 transition-colors"
-                />
-                {isSearchingLocation ? (
-                  <Loader2 className="w-3.5 h-3.5 text-[#00D1FF] animate-spin absolute right-3 top-1/2 -translate-y-1/2" />
-                ) : searchQuery ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearchQuery('');
-                      setSearchResults([]);
-                      setShowSearchDropdown(false);
-                      setSearchLocation(null);
+          {/* COMPACT RESPONSIVE TOP TOOLBAR (Search, Use My Location, Quality Filters) */}
+          <div className="bg-[#12161C] p-2.5 sm:p-3 rounded-2xl sm:rounded-[24px] border border-white/5 shadow-xl space-y-2.5">
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2 sm:gap-2.5">
+              {/* Search Input with Nominatim Autocomplete */}
+              <div className="relative flex-1 min-w-0">
+                <form onSubmit={handleSearchSubmit} className="relative">
+                  <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    onFocus={() => {
+                      if (searchResults.length > 0) setShowSearchDropdown(true);
                     }}
-                    className="p-1 text-neutral-400 hover:text-white absolute right-2.5 top-1/2 -translate-y-1/2"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                ) : null}
-              </form>
-
-              {/* Autocomplete Dropdown */}
-              {showSearchDropdown && searchResults.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-[#12161C] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 divide-y divide-white/5 max-h-56 overflow-y-auto">
-                  {searchResults.map((res) => (
+                    placeholder="Search city, park, or source..."
+                    className="w-full bg-[#090B0E] border border-white/10 rounded-xl pl-9 pr-9 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50 transition-colors"
+                  />
+                  {isSearchingLocation ? (
+                    <Loader2 className="w-3.5 h-3.5 text-[#00D1FF] animate-spin absolute right-3 top-1/2 -translate-y-1/2" />
+                  ) : searchQuery ? (
                     <button
-                      key={res.placeId}
                       type="button"
-                      onClick={() => handleSelectSearchResult(res)}
-                      className="w-full p-2.5 text-left hover:bg-white/[0.06] transition-colors flex items-center gap-2 text-xs text-white"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setSearchResults([]);
+                        setShowSearchDropdown(false);
+                        setSearchLocation(null);
+                      }}
+                      className="p-1 text-neutral-400 hover:text-white absolute right-2.5 top-1/2 -translate-y-1/2"
                     >
-                      <Compass className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-white truncate">{res.name}</p>
-                        <p className="text-[10px] text-neutral-400 truncate">{res.displayName}</p>
-                      </div>
+                      <X className="w-3 h-3" />
                     </button>
-                  ))}
-                </div>
-              )}
-            </div>
+                  ) : null}
+                </form>
 
-            {/* Action Group: Use My Location + Single-Row Quality Filters */}
-            <div className="flex items-center gap-1.5 xs:gap-2 w-full md:w-auto justify-between md:justify-end flex-nowrap shrink-0">
-              {/* Icon-Only My Location Button */}
-              <button
-                id="btn-use-my-location"
-                type="button"
-                onClick={handleUseMyLocation}
-                disabled={locState.status === 'acquiring'}
-                title="Use My Location"
-                aria-label="Use My Location"
-                className={`h-[34px] w-[34px] sm:h-9 sm:w-9 rounded-xl border transition-all flex items-center justify-center shrink-0 cursor-pointer ${
-                  deviceLocation && explorationLocation?.source === 'device'
+                {/* Autocomplete Dropdown */}
+                {showSearchDropdown && searchResults.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-[#12161C] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 divide-y divide-white/5 max-h-56 overflow-y-auto">
+                    {searchResults.map((res) => (
+                      <button
+                        key={res.placeId}
+                        type="button"
+                        onClick={() => handleSelectSearchResult(res)}
+                        className="w-full p-2.5 text-left hover:bg-white/[0.06] transition-colors flex items-center gap-2 text-xs text-white"
+                      >
+                        <Compass className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-white truncate">{res.name}</p>
+                          <p className="text-[10px] text-neutral-400 truncate">{res.displayName}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Action Group: Use My Location + Single-Row Quality Filters */}
+              <div className="flex items-center gap-1.5 xs:gap-2 w-full md:w-auto justify-between md:justify-end flex-nowrap shrink-0">
+                {/* Icon-Only My Location Button */}
+                <button
+                  id="btn-use-my-location"
+                  type="button"
+                  onClick={handleUseMyLocation}
+                  disabled={locState.status === 'acquiring'}
+                  title="Use My Location"
+                  aria-label="Use My Location"
+                  className={`h-[34px] w-[34px] sm:h-9 sm:w-9 rounded-xl border transition-all flex items-center justify-center shrink-0 cursor-pointer ${deviceLocation && explorationLocation?.source === 'device'
                     ? 'bg-[#00D1FF]/20 text-[#00D1FF] border-[#00D1FF]/50 shadow-sm shadow-[#00D1FF]/20'
                     : 'bg-[#090B0E] text-neutral-300 hover:text-white border-white/10 hover:border-white/20'
-                }`}
-              >
-                {locState.status === 'acquiring' ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-[#00D1FF]" />
-                ) : (
-                  <Navigation className="w-4 h-4 text-[#00D1FF]" />
-                )}
-              </button>
+                    }`}
+                >
+                  {locState.status === 'acquiring' ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-[#00D1FF]" />
+                  ) : (
+                    <Navigation className="w-4 h-4 text-[#00D1FF]" />
+                  )}
+                </button>
 
-              {/* 4 Quality Filter Controls - Strictly ONE SINGLE ROW, No scroll, No wrap, balanced layout */}
-              <div
-                role="radiogroup"
-                aria-label="Water Quality Filters"
-                className="flex-1 md:flex-initial flex items-center flex-nowrap bg-[#090B0E] border border-white/10 rounded-xl p-0.5 gap-0.5 xs:gap-1 h-[34px] sm:h-9 shrink-0"
-              >
-                {/* ALL */}
-                <button
-                  id="filter-quality-all"
-                  type="button"
-                  role="radio"
-                  aria-checked={filterQuality === 'all'}
-                  aria-label={`All water sources (${reports.length})`}
-                  title={`All (${reports.length})`}
-                  onClick={() => setFilterQuality('all')}
-                  className={`flex-1 md:flex-initial h-full flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 rounded-lg border text-xs font-medium transition-all shrink-0 cursor-pointer ${
-                    filterQuality === 'all'
+                {/* 4 Quality Filter Controls - Strictly ONE SINGLE ROW, No scroll, No wrap, balanced layout */}
+                <div
+                  role="radiogroup"
+                  aria-label="Water Quality Filters"
+                  className="flex-1 md:flex-initial flex items-center flex-nowrap bg-[#090B0E] border border-white/10 rounded-xl p-0.5 gap-0.5 xs:gap-1 h-[34px] sm:h-9 shrink-0"
+                >
+                  {/* ALL */}
+                  <button
+                    id="filter-quality-all"
+                    type="button"
+                    role="radio"
+                    aria-checked={filterQuality === 'all'}
+                    aria-label={`All water sources (${reports.length})`}
+                    title={`All (${reports.length})`}
+                    onClick={() => setFilterQuality('all')}
+                    className={`flex-1 md:flex-initial h-full flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 rounded-lg border text-xs font-medium transition-all shrink-0 cursor-pointer ${filterQuality === 'all'
                       ? 'bg-white/15 text-white border-white/30 shadow-sm font-semibold'
                       : 'text-neutral-400 hover:text-white hover:bg-white/5 border-transparent'
-                  }`}
-                >
-                  <Layers className={`w-3.5 h-3.5 shrink-0 ${filterQuality === 'all' ? 'text-white' : 'text-neutral-400'}`} />
-                  <span className="hidden sm:inline">All</span>
-                </button>
+                      }`}
+                  >
+                    <Layers className={`w-3.5 h-3.5 shrink-0 ${filterQuality === 'all' ? 'text-white' : 'text-neutral-400'}`} />
+                    <span className="hidden sm:inline">All</span>
+                  </button>
 
-                {/* EXCELLENT */}
-                <button
-                  id="filter-quality-excellent"
-                  type="button"
-                  role="radio"
-                  aria-checked={filterQuality === 'excellent'}
-                  aria-label="Excellent quality (score ≥88)"
-                  title="Excellent (Score ≥88)"
-                  onClick={() => setFilterQuality('excellent')}
-                  className={`flex-1 md:flex-initial h-full flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 rounded-lg border text-xs font-medium transition-all shrink-0 cursor-pointer ${
-                    filterQuality === 'excellent'
+                  {/* EXCELLENT */}
+                  <button
+                    id="filter-quality-excellent"
+                    type="button"
+                    role="radio"
+                    aria-checked={filterQuality === 'excellent'}
+                    aria-label="Excellent quality (score ≥88)"
+                    title="Excellent (Score ≥88)"
+                    onClick={() => setFilterQuality('excellent')}
+                    className={`flex-1 md:flex-initial h-full flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 rounded-lg border text-xs font-medium transition-all shrink-0 cursor-pointer ${filterQuality === 'excellent'
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm font-semibold'
                       : 'text-neutral-400 hover:text-emerald-300 hover:bg-emerald-500/5 border-transparent'
-                  }`}
-                >
-                  <Sparkles className={`w-3.5 h-3.5 shrink-0 ${filterQuality === 'excellent' ? 'text-emerald-300' : 'text-emerald-500/70'}`} />
-                  <span className="hidden sm:inline">Excellent</span>
-                </button>
+                      }`}
+                  >
+                    <Sparkles className={`w-3.5 h-3.5 shrink-0 ${filterQuality === 'excellent' ? 'text-emerald-300' : 'text-emerald-500/70'}`} />
+                    <span className="hidden sm:inline">Excellent</span>
+                  </button>
 
-                {/* GOOD */}
-                <button
-                  id="filter-quality-good"
-                  type="button"
-                  role="radio"
-                  aria-checked={filterQuality === 'good'}
-                  aria-label="Good quality (score 70-87)"
-                  title="Good (Score 70–87)"
-                  onClick={() => setFilterQuality('good')}
-                  className={`flex-1 md:flex-initial h-full flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 rounded-lg border text-xs font-medium transition-all shrink-0 cursor-pointer ${
-                    filterQuality === 'good'
+                  {/* GOOD */}
+                  <button
+                    id="filter-quality-good"
+                    type="button"
+                    role="radio"
+                    aria-checked={filterQuality === 'good'}
+                    aria-label="Good quality (score 70-87)"
+                    title="Good (Score 70–87)"
+                    onClick={() => setFilterQuality('good')}
+                    className={`flex-1 md:flex-initial h-full flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 rounded-lg border text-xs font-medium transition-all shrink-0 cursor-pointer ${filterQuality === 'good'
                       ? 'bg-[#00D1FF]/20 text-[#00D1FF] border-[#00D1FF]/40 shadow-sm font-semibold'
                       : 'text-neutral-400 hover:text-[#00D1FF] hover:bg-[#00D1FF]/5 border-transparent'
-                  }`}
-                >
-                  <Droplets className={`w-3.5 h-3.5 shrink-0 ${filterQuality === 'good' ? 'text-[#00D1FF]' : 'text-cyan-500/70'}`} />
-                  <span className="hidden sm:inline">Good</span>
-                </button>
+                      }`}
+                  >
+                    <Droplets className={`w-3.5 h-3.5 shrink-0 ${filterQuality === 'good' ? 'text-[#00D1FF]' : 'text-cyan-500/70'}`} />
+                    <span className="hidden sm:inline">Good</span>
+                  </button>
 
-                {/* CAUTION */}
-                <button
-                  id="filter-quality-caution"
-                  type="button"
-                  role="radio"
-                  aria-checked={filterQuality === 'caution'}
-                  aria-label="Caution quality (score <70)"
-                  title="Caution (Score <70)"
-                  onClick={() => setFilterQuality('caution')}
-                  className={`flex-1 md:flex-initial h-full flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 rounded-lg border text-xs font-medium transition-all shrink-0 cursor-pointer ${
-                    filterQuality === 'caution'
+                  {/* CAUTION */}
+                  <button
+                    id="filter-quality-caution"
+                    type="button"
+                    role="radio"
+                    aria-checked={filterQuality === 'caution'}
+                    aria-label="Caution quality (score <70)"
+                    title="Caution (Score <70)"
+                    onClick={() => setFilterQuality('caution')}
+                    className={`flex-1 md:flex-initial h-full flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 rounded-lg border text-xs font-medium transition-all shrink-0 cursor-pointer ${filterQuality === 'caution'
                       ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm font-semibold'
                       : 'text-neutral-400 hover:text-amber-300 hover:bg-amber-500/5 border-transparent'
-                  }`}
-                >
-                  <AlertTriangle className={`w-3.5 h-3.5 shrink-0 ${filterQuality === 'caution' ? 'text-amber-300' : 'text-amber-500/70'}`} />
-                  <span className="hidden sm:inline">Caution</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Location Acquisition Progress Indicator */}
-          {locState.status === 'acquiring' && locState.stageText && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-[#00D1FF]/10 border border-[#00D1FF]/20 rounded-xl text-xs text-[#00D1FF]">
-              <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-              <span>{locState.stageText}</span>
-            </div>
-          )}
-
-          {/* GPS Error Banner with immediate resolution options */}
-          {locState.status === 'error' && (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
-                <span className="truncate">{locState.errorMessage}</span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={handleUseMyLocation}
-                  className="px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-white rounded-lg text-[11px] font-semibold transition-colors"
-                >
-                  Retry GPS
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Approximate Network Location Banner */}
-          {locState.status === 'success' && locState.isApproximate && (
-            <div className="flex items-center justify-between px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Info className="w-3.5 h-3.5 shrink-0 text-amber-400" />
-                <span className="truncate">
-                  Using approximate Network location. Search or tap on map to pinpoint exact location.
-                </span>
-              </div>
-              <button
-                onClick={() => setLocState((prev) => ({ ...prev, isApproximate: false }))}
-                className="text-amber-400 hover:text-white p-0.5"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          )}
-
-          {activeReferenceLocation && (
-            <div className="flex items-center justify-between px-3 py-1.5 bg-[#181E26] border border-white/10 rounded-xl text-xs text-neutral-300">
-              <div className="flex items-center gap-1.5 min-w-0">
-                {activeReferenceLocation.type === 'device' ? (
-                  <Navigation className="w-3.5 h-3.5 text-[#00D1FF] shrink-0" />
-                ) : activeReferenceLocation.type === 'search' ? (
-                  <Search className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                ) : (
-                  <Compass className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                )}
-                <span className="truncate text-[11px] sm:text-xs">
-                  Discovering water sources near:{' '}
-                  <strong className="text-white">{activeReferenceLocation.label}</strong>
-                </span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {explorationLocation && (
-                  <button
-                    onClick={() => {
-                      setExplorationLocation(null);
-                      setSearchLocation(null);
-                    }}
-                    className="text-[10px] text-neutral-400 hover:text-white underline"
+                      }`}
                   >
-                    Reset
+                    <AlertTriangle className={`w-3.5 h-3.5 shrink-0 ${filterQuality === 'caution' ? 'text-amber-300' : 'text-amber-500/70'}`} />
+                    <span className="hidden sm:inline">Caution</span>
                   </button>
-                )}
+                </div>
               </div>
             </div>
-          )}
-        </div>
 
-        {/* MAIN RESPONSIVE MAP & SOURCES LAYOUT */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 lg:gap-5 items-start">
-          {/* Leaflet OpenStreetMap Canvas (7 cols on lg) */}
-          <div className="lg:col-span-7 bg-[#12161C] border border-white/5 rounded-2xl sm:rounded-[28px] p-2 sm:p-3 overflow-hidden relative shadow-2xl flex flex-col">
-            {/* Map Top Status Bar */}
-            <div className="flex items-center justify-between pb-2 px-1 text-[11px]">
-              <div className="flex items-center gap-1.5 text-neutral-300 font-medium truncate">
-                <Compass className="w-3.5 h-3.5 text-[#00D1FF] shrink-0" />
-                <span className="truncate">
-                  {explorationLocation
-                    ? `Exploring: ${explorationLocation.label}`
-                    : searchLocation
-                    ? `Search: ${searchLocation.label}`
-                    : deviceLocation
-                    ? 'Centered on your GPS location'
-                    : 'AquaSense Global Water Network'}
-                </span>
+            {/* Location Acquisition Progress Indicator */}
+            {locState.status === 'acquiring' && locState.stageText && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-[#00D1FF]/10 border border-[#00D1FF]/20 rounded-xl text-xs text-[#00D1FF]">
+                <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                <span>{locState.stageText}</span>
               </div>
-              <span className="text-[10px] text-neutral-400 font-mono shrink-0 ml-2">
-                {filteredAndRankedReports.length} Sources
-              </span>
-            </div>
+            )}
 
-            {/* Leaflet Map with 3 Location Models & Accuracy Circle */}
-            <div className="w-full h-[320px] xs:h-[380px] sm:h-[460px] lg:h-[540px] rounded-xl sm:rounded-[22px] overflow-hidden border border-white/10 relative">
-              <LeafletCommunityMap
-                reports={filteredAndRankedReports}
-                selectedReport={selectedReport}
-                onSelectReport={handleSelectReport}
-                deviceLocation={deviceLocation}
-                searchLocation={searchLocation}
-                explorationLocation={explorationLocation}
-                onMapClick={handleMapClick}
-              />
-            </div>
-
-            {/* Map Legend & Exploration hint */}
-            <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 px-1 text-[10px] sm:text-[11px] text-neutral-400">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-[#00D1FF]" /> GPS
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-amber-400" /> Search
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" /> Explore Pin
-                </span>
+            {/* GPS Error Banner with immediate resolution options */}
+            {locState.status === 'error' && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+                  <span className="truncate">{locState.errorMessage}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={handleUseMyLocation}
+                    className="px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-white rounded-lg text-[11px] font-semibold transition-colors"
+                  >
+                    Retry GPS
+                  </button>
+                </div>
               </div>
-              <span className="text-[10px] text-neutral-500 font-mono">
-                Click map to explore nearby sources
-              </span>
-            </div>
+            )}
+
+            {/* Approximate Network Location Banner */}
+            {locState.status === 'success' && locState.isApproximate && (
+              <div className="flex items-center justify-between px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Info className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                  <span className="truncate">
+                    Using approximate Network location. Search or tap on map to pinpoint exact location.
+                  </span>
+                </div>
+                <button
+                  onClick={() => setLocState((prev) => ({ ...prev, isApproximate: false }))}
+                  className="text-amber-400 hover:text-white p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+
+            {activeReferenceLocation && (
+              <div className="flex items-center justify-between px-3 py-1.5 bg-[#181E26] border border-white/10 rounded-xl text-xs text-neutral-300">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {activeReferenceLocation.type === 'device' ? (
+                    <Navigation className="w-3.5 h-3.5 text-[#00D1FF] shrink-0" />
+                  ) : activeReferenceLocation.type === 'search' ? (
+                    <Search className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  ) : (
+                    <Compass className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  )}
+                  <span className="truncate text-[11px] sm:text-xs">
+                    Discovering water sources near:{' '}
+                    <strong className="text-white">{activeReferenceLocation.label}</strong>
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {explorationLocation && (
+                    <button
+                      onClick={() => {
+                        setExplorationLocation(null);
+                        setSearchLocation(null);
+                      }}
+                      className="text-[10px] text-neutral-400 hover:text-white underline"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Selected Water Source Details Card & Nearby Sources Directory (5 cols on lg) */}
-          <div className="lg:col-span-5 space-y-3 sm:space-y-4">
-            {/* Desktop Selected Water Source Card */}
-            {selectedReport ? (
-              <div className="hidden lg:block p-4 sm:p-5 rounded-2xl sm:rounded-[28px] bg-[#12161C] border border-cyan-500/20 shadow-2xl space-y-3.5">
-                {/* Card Header */}
-                <div className="flex items-start justify-between gap-3 pb-3 border-b border-white/5">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-[#00D1FF]">
-                        Selected Water Source
-                      </span>
-                      <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-white/[0.05] border border-white/10 text-neutral-300">
-                        {getSourceTypeLabel(selectedReport.sourceType)}
-                      </span>
-                    </div>
+          {/* MAIN RESPONSIVE MAP & SOURCES LAYOUT */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 lg:gap-5 items-start">
+            {/* Leaflet OpenStreetMap Canvas (7 cols on lg) */}
+            <div className="lg:col-span-7 bg-[#12161C] border border-white/5 rounded-2xl sm:rounded-[28px] p-2 sm:p-3 overflow-hidden relative shadow-2xl flex flex-col">
+              {/* Map Top Status Bar */}
+              <div className="flex items-center justify-between pb-2 px-1 text-[11px]">
+                <div className="flex items-center gap-1.5 text-neutral-300 font-medium truncate">
+                  <Compass className="w-3.5 h-3.5 text-[#00D1FF] shrink-0" />
+                  <span className="truncate">
+                    {explorationLocation
+                      ? `Exploring: ${explorationLocation.label}`
+                      : searchLocation
+                        ? `Search: ${searchLocation.label}`
+                        : deviceLocation
+                          ? 'Centered on your GPS location'
+                          : 'AquaSense Global Water Network'}
+                  </span>
+                </div>
+                <span className="text-[10px] text-neutral-400 font-mono shrink-0 ml-2">
+                  {filteredAndRankedReports.length} Sources
+                </span>
+              </div>
 
-                    <h3 className="text-sm sm:text-base font-semibold text-white leading-tight truncate">
-                      {selectedReport.sourceName}
-                    </h3>
+              {/* Leaflet Map with 3 Location Models & Accuracy Circle */}
+              <div className="w-full h-[320px] xs:h-[380px] sm:h-[460px] lg:h-[540px] rounded-xl sm:rounded-[22px] overflow-hidden border border-white/10 relative">
+                <LeafletCommunityMap
+                  reports={filteredAndRankedReports}
+                  selectedReport={selectedReport}
+                  onSelectReport={handleSelectReport}
+                  deviceLocation={deviceLocation}
+                  searchLocation={searchLocation}
+                  explorationLocation={explorationLocation}
+                  onMapClick={handleMapClick}
+                />
+              </div>
 
-                    <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-neutral-400">
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-neutral-400" />
-                        <span>{selectedReport.lastTestedAt}</span>
+              {/* Map Legend & Exploration hint */}
+              <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 px-1 text-[10px] sm:text-[11px] text-neutral-400">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-[#00D1FF]" /> GPS
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-amber-400" /> Search
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" /> Explore Pin
+                  </span>
+                </div>
+                <span className="text-[10px] text-neutral-500 font-mono">
+                  Click map to explore nearby sources
+                </span>
+              </div>
+            </div>
+
+            {/* Selected Water Source Details Card & Nearby Sources Directory (5 cols on lg) */}
+            <div className="lg:col-span-5 space-y-3 sm:space-y-4">
+              {/* Desktop Selected Water Source Card */}
+              {selectedReport ? (
+                <div className="hidden lg:block p-4 sm:p-5 rounded-2xl sm:rounded-[28px] bg-[#12161C] border border-cyan-500/20 shadow-2xl space-y-3.5">
+                  {/* Card Header */}
+                  <div className="flex items-start justify-between gap-3 pb-3 border-b border-white/5">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#00D1FF]">
+                          Selected Water Source
+                        </span>
+                        <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-white/[0.05] border border-white/10 text-neutral-300">
+                          {getSourceTypeLabel(selectedReport.sourceType)}
+                        </span>
                       </div>
-                      {selectedReport.distanceKm !== undefined && (
-                        <>
-                          <span>•</span>
-                          <span className="text-cyan-300 font-medium">
-                            {geocodingService.formatDistance(selectedReport.distanceKm)} away
-                          </span>
-                        </>
-                      )}
-                      <span>•</span>
-                      <span className="truncate">
-                        By {selectedReport.authorName || 'AquaSense Contributor'}
+
+                      <h3 className="text-sm sm:text-base font-semibold text-white leading-tight truncate">
+                        {selectedReport.sourceName}
+                      </h3>
+
+                      <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-neutral-400">
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-neutral-400" />
+                          <span>{selectedReport.lastTestedAt}</span>
+                        </div>
+                        {selectedReport.distanceKm !== undefined && (
+                          <>
+                            <span>•</span>
+                            <span className="text-cyan-300 font-medium">
+                              {geocodingService.formatDistance(selectedReport.distanceKm)} away
+                            </span>
+                          </>
+                        )}
+                        <span>•</span>
+                        <span className="truncate">
+                          By {selectedReport.authorName || 'AquaSense Contributor'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <div className="flex items-baseline justify-end gap-1">
+                        <span className="text-2xl sm:text-3xl font-light text-white font-sans">
+                          {selectedReport.qualityScore}
+                        </span>
+                        <span className="text-xs text-neutral-400 font-mono">/100</span>
+                      </div>
+                      <span
+                        className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${getScoreColor(selectedReport.qualityScore).text} ${getScoreColor(selectedReport.qualityScore).border} bg-white/[0.02] inline-block mt-0.5`}
+                      >
+                        {getScoreColor(selectedReport.qualityScore).label}
                       </span>
                     </div>
                   </div>
 
-                  <div className="text-right shrink-0">
-                    <div className="flex items-baseline justify-end gap-1">
-                      <span className="text-2xl sm:text-3xl font-light text-white font-sans">
-                        {selectedReport.qualityScore}
-                      </span>
-                      <span className="text-xs text-neutral-400 font-mono">/100</span>
+                  {/* Sensor Telemetry Snapshot */}
+                  <div className="grid grid-cols-4 gap-1.5 text-center text-xs p-2.5 rounded-xl bg-[#090B0E] border border-white/5">
+                    <div>
+                      <span className="text-[9px] text-neutral-500 block font-mono">pH</span>
+                      <span className="font-semibold text-white">{selectedReport.ph}</span>
                     </div>
-                    <span
-                      className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${getScoreColor(selectedReport.qualityScore).text} ${getScoreColor(selectedReport.qualityScore).border} bg-white/[0.02] inline-block mt-0.5`}
-                    >
-                      {getScoreColor(selectedReport.qualityScore).label}
-                    </span>
+                    <div>
+                      <span className="text-[9px] text-neutral-500 block font-mono">TDS</span>
+                      <span className="font-semibold text-white">{selectedReport.tds} ppm</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-neutral-500 block font-mono">CLARITY</span>
+                      <span className="font-semibold text-white">{selectedReport.turbidity} NTU</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-neutral-500 block font-mono">TEMP</span>
+                      <span className="font-semibold text-white">{selectedReport.temperature}°C</span>
+                    </div>
                   </div>
-                </div>
 
-                {/* Sensor Telemetry Snapshot */}
-                <div className="grid grid-cols-4 gap-1.5 text-center text-xs p-2.5 rounded-xl bg-[#090B0E] border border-white/5">
-                  <div>
-                    <span className="text-[9px] text-neutral-500 block font-mono">pH</span>
-                    <span className="font-semibold text-white">{selectedReport.ph}</span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] text-neutral-500 block font-mono">TDS</span>
-                    <span className="font-semibold text-white">{selectedReport.tds} ppm</span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] text-neutral-500 block font-mono">CLARITY</span>
-                    <span className="font-semibold text-white">{selectedReport.turbidity} NTU</span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] text-neutral-500 block font-mono">TEMP</span>
-                    <span className="font-semibold text-white">{selectedReport.temperature}°C</span>
-                  </div>
-                </div>
+                  {/* Tester notes */}
+                  {selectedReport.notes && (
+                    <p className="text-xs text-neutral-300 leading-relaxed bg-[#090B0E] p-2.5 rounded-xl border border-white/5 italic">
+                      "{selectedReport.notes}"
+                    </p>
+                  )}
 
-                {/* Tester notes */}
-                {selectedReport.notes && (
-                  <p className="text-xs text-neutral-300 leading-relaxed bg-[#090B0E] p-2.5 rounded-xl border border-white/5 italic">
-                    "{selectedReport.notes}"
-                  </p>
-                )}
-
-                {/* Verification Action Button */}
-                <button
-                  onClick={() => handleToggleVerification(selectedReport)}
-                  className={`w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all border touch-target sm:min-h-0 cursor-pointer active:scale-98 ${
-                    selectedReport.userHasVerified
+                  {/* Verification Action Button */}
+                  <button
+                    onClick={() => handleToggleVerification(selectedReport)}
+                    className={`w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all border touch-target sm:min-h-0 cursor-pointer active:scale-98 ${selectedReport.userHasVerified
                       ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40 shadow-sm'
                       : 'bg-white/[0.04] hover:bg-white/[0.08] text-white border-white/10 hover:border-[#00D1FF]/40'
-                  }`}
-                >
-                  <ThumbsUp className="w-3.5 h-3.5" />
-                  <span>
-                    {selectedReport.userHasVerified ? '✓ Verified by You' : 'Verify This Water Source'}{' '}
-                    ({selectedReport.verifiedReports} verifications)
-                  </span>
-                </button>
+                      }`}
+                  >
+                    <ThumbsUp className="w-3.5 h-3.5" />
+                    <span>
+                      {selectedReport.userHasVerified ? '✓ Verified by You' : 'Verify This Water Source'}{' '}
+                      ({selectedReport.verifiedReports} verifications)
+                    </span>
+                  </button>
 
-                {/* Quality Guidance */}
-                <div className="pt-2 border-t border-white/5 text-[10px] text-neutral-400 flex items-center gap-1.5">
-                  <Info className="w-3 h-3 shrink-0 text-[#00D1FF]" />
-                  <span className="truncate">
-                    Crowdsourced from verified AquaSense X smart bottle sensors.
+                  {/* Quality Guidance */}
+                  <div className="pt-2 border-t border-white/5 text-[10px] text-neutral-400 flex items-center gap-1.5">
+                    <Info className="w-3 h-3 shrink-0 text-[#00D1FF]" />
+                    <span className="truncate">
+                      Crowdsourced from verified AquaSense X smart bottle sensors.
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Nearby Water Sources Feed (Naturally expanding, part of main page scroll) */}
+              <div className="space-y-2 bg-[#12161C] p-3.5 sm:p-4 rounded-2xl sm:rounded-[28px] border border-white/5 shadow-xl">
+                <div className="flex items-center justify-between px-1 pb-1">
+                  <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-neutral-300">
+                    {activeReferenceLocation
+                      ? `Nearby Sources (${activeReferenceLocation.label})`
+                      : 'Community Water Directory'}
+                  </span>
+                  <span className="text-[10px] text-neutral-400 font-mono">
+                    {filteredAndRankedReports.length} results
                   </span>
                 </div>
-              </div>
-            ) : null}
 
-            {/* Nearby Water Sources Feed (Naturally expanding, part of main page scroll) */}
-            <div className="space-y-2 bg-[#12161C] p-3.5 sm:p-4 rounded-2xl sm:rounded-[28px] border border-white/5 shadow-xl">
-              <div className="flex items-center justify-between px-1 pb-1">
-                <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-neutral-300">
-                  {activeReferenceLocation
-                    ? `Nearby Sources (${activeReferenceLocation.label})`
-                    : 'Community Water Directory'}
-                </span>
-                <span className="text-[10px] text-neutral-400 font-mono">
-                  {filteredAndRankedReports.length} results
-                </span>
-              </div>
+                <div className="space-y-1.5">
+                  {filteredAndRankedReports.length === 0 ? (
+                    <div className="text-center py-8 text-xs text-neutral-500">
+                      No community water sources found for the selected filter.
+                    </div>
+                  ) : (
+                    filteredAndRankedReports.map((rep) => {
+                      const isSelected = selectedReport?.id === rep.id;
+                      const scoreInfo = getScoreColor(rep.qualityScore);
+                      const SourceIcon = getSourceIcon(rep.sourceType);
 
-              <div className="space-y-1.5">
-                {filteredAndRankedReports.length === 0 ? (
-                  <div className="text-center py-8 text-xs text-neutral-500">
-                    No community water sources found for the selected filter.
-                  </div>
-                ) : (
-                  filteredAndRankedReports.map((rep) => {
-                    const isSelected = selectedReport?.id === rep.id;
-                    const scoreInfo = getScoreColor(rep.qualityScore);
-                    const SourceIcon = getSourceIcon(rep.sourceType);
-
-                    return (
-                      <div
-                        key={rep.id}
-                        id={`directory-source-${rep.id}`}
-                        onClick={() => handleSelectReport(rep)}
-                        className={`p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 sm:gap-3 touch-target sm:min-h-0 ${
-                          isSelected
+                      return (
+                        <div
+                          key={rep.id}
+                          id={`directory-source-${rep.id}`}
+                          onClick={() => handleSelectReport(rep)}
+                          className={`p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 sm:gap-3 touch-target sm:min-h-0 ${isSelected
                             ? 'bg-[#181E26] border-[#00D1FF]/60 shadow-md ring-1 ring-[#00D1FF]/30'
                             : 'bg-[#090B0E] border-white/5 hover:bg-white/[0.04] hover:border-white/15'
-                        }`}
-                      >
-                        {/* Compact Source Icon Badge */}
-                        <div
-                          className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0 border transition-colors ${
-                            isSelected
+                            }`}
+                        >
+                          {/* Compact Source Icon Badge */}
+                          <div
+                            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0 border transition-colors ${isSelected
                               ? 'bg-[#00D1FF]/15 border-[#00D1FF]/30 text-[#00D1FF]'
                               : 'bg-white/[0.04] border-white/10 text-cyan-400/90'
-                          }`}
-                        >
-                          <SourceIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                        </div>
-
-                        {/* Primary Content Rows */}
-                        <div className="min-w-0 flex-1">
-                          {/* Row 1: Source Name */}
-                          <p className="text-xs sm:text-sm font-semibold text-white truncate leading-tight">
-                            {rep.sourceName}
-                          </p>
-
-                          {/* Row 2: Quality Category & Distance */}
-                          <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 text-[11px] mt-0.5 leading-tight">
-                            <span className={`font-medium ${scoreInfo.text}`}>
-                              {scoreInfo.label}
-                            </span>
-                            {rep.distanceKm !== undefined && (
-                              <>
-                                <span className="text-neutral-600">•</span>
-                                <span className="text-neutral-300 font-medium">
-                                  {geocodingService.formatDistance(rep.distanceKm)}
-                                </span>
-                              </>
-                            )}
-                          </div>
-
-                          {/* Row 3: Tested Relative Time & Verification Count */}
-                          <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 text-[10px] sm:text-[11px] text-neutral-400 mt-0.5 leading-tight">
-                            <span>Tested {rep.lastTestedAt}</span>
-                            <span className="text-neutral-600">•</span>
-                            <span className="inline-flex items-center gap-0.5 text-emerald-400 font-medium">
-                              <Check className="w-3 h-3 text-emerald-400" />
-                              <span>{rep.verifiedReports || 0} verified</span>
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Right: Compact Quality Score Badge & Subtle Chevron */}
-                        <div className="text-right shrink-0 flex items-center gap-1.5 sm:gap-2">
-                          <span
-                            className={`text-xs sm:text-sm font-bold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg font-sans inline-block ${scoreInfo.bg}/15 ${scoreInfo.text} border ${scoreInfo.border}`}
+                              }`}
                           >
-                            {rep.qualityScore}
-                          </span>
-                          <ChevronRight className="w-3.5 h-3.5 text-neutral-500 hidden sm:block shrink-0" />
+                            <SourceIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                          </div>
+
+                          {/* Primary Content Rows */}
+                          <div className="min-w-0 flex-1">
+                            {/* Row 1: Source Name */}
+                            <p className="text-xs sm:text-sm font-semibold text-white truncate leading-tight">
+                              {rep.sourceName}
+                            </p>
+
+                            {/* Row 2: Quality Category & Distance */}
+                            <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 text-[11px] mt-0.5 leading-tight">
+                              <span className={`font-medium ${scoreInfo.text}`}>
+                                {scoreInfo.label}
+                              </span>
+                              {rep.distanceKm !== undefined && (
+                                <>
+                                  <span className="text-neutral-600">•</span>
+                                  <span className="text-neutral-300 font-medium">
+                                    {geocodingService.formatDistance(rep.distanceKm)}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+
+                            {/* Row 3: Tested Relative Time & Verification Count */}
+                            <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 text-[10px] sm:text-[11px] text-neutral-400 mt-0.5 leading-tight">
+                              <span>Tested {rep.lastTestedAt}</span>
+                              <span className="text-neutral-600">•</span>
+                              <span className="inline-flex items-center gap-0.5 text-emerald-400 font-medium">
+                                <Check className="w-3 h-3 text-emerald-400" />
+                                <span>{rep.verifiedReports || 0} verified</span>
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Right: Compact Quality Score Badge & Subtle Chevron */}
+                          <div className="text-right shrink-0 flex items-center gap-1.5 sm:gap-2">
+                            <span
+                              className={`text-xs sm:text-sm font-bold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg font-sans inline-block ${scoreInfo.bg}/15 ${scoreInfo.text} border ${scoreInfo.border}`}
+                            >
+                              {rep.qualityScore}
+                            </span>
+                            <ChevronRight className="w-3.5 h-3.5 text-neutral-500 hidden sm:block shrink-0" />
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })
-                )}
+                      );
+                    })
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* MOBILE BOTTOM SHEET FOR SELECTED WATER SOURCE */}
-        <AnimatePresence>
-          {isMobileSheetOpen && selectedReport && (
-            <div className="lg:hidden fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm p-0">
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 280 }}
-              className="w-full bg-[#12161C] border-t border-cyan-500/30 rounded-t-[24px] p-4 sm:p-5 shadow-2xl max-h-[85vh] overflow-y-auto safe-area-pb space-y-3.5"
-            >
-              {/* Header with dismiss button */}
-              <div className="flex items-start justify-between gap-3 pb-2.5 border-b border-white/10">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-[#00D1FF] whitespace-nowrap">
-                      <span className="sm:hidden">Water Source</span>
-                      <span className="hidden sm:inline">Selected Water Source</span>
-                    </span>
-                    <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-white/[0.05] border border-white/10 text-neutral-300 shrink-0 whitespace-nowrap">
-                      {getSourceTypeLabel(selectedReport.sourceType)}
-                    </span>
-                  </div>
-                  <h3 className="text-sm sm:text-base font-semibold text-white leading-tight truncate">
-                    {selectedReport.sourceName}
-                  </h3>
-                  <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-neutral-400">
-                    <span>{selectedReport.lastTestedAt}</span>
-                    {selectedReport.distanceKm !== undefined && (
-                      <>
-                        <span>•</span>
-                        <span className="text-cyan-300 font-medium">
-                          {geocodingService.formatDistance(selectedReport.distanceKm)} away
+          {/* MOBILE BOTTOM SHEET FOR SELECTED WATER SOURCE */}
+          <AnimatePresence>
+            {isMobileSheetOpen && selectedReport && (
+              <div className="lg:hidden fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm p-0">
+                <motion.div
+                  initial={{ y: '100%' }}
+                  animate={{ y: 0 }}
+                  exit={{ y: '100%' }}
+                  transition={{ type: 'spring', damping: 25, stiffness: 280 }}
+                  className="w-full bg-[#12161C] border-t border-cyan-500/30 rounded-t-[24px] p-4 sm:p-5 shadow-2xl max-h-[85vh] overflow-y-auto safe-area-pb space-y-3.5"
+                >
+                  {/* Header with dismiss button */}
+                  <div className="flex items-start justify-between gap-3 pb-2.5 border-b border-white/10">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#00D1FF] whitespace-nowrap">
+                          <span className="sm:hidden">Water Source</span>
+                          <span className="hidden sm:inline">Selected Water Source</span>
                         </span>
-                      </>
-                    )}
-                    <span>•</span>
-                    <span>
-                      By {selectedReport.authorName || 'AquaSense Contributor'}
-                    </span>
-                  </div>
-                </div>
+                        <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-white/[0.05] border border-white/10 text-neutral-300 shrink-0 whitespace-nowrap">
+                          {getSourceTypeLabel(selectedReport.sourceType)}
+                        </span>
+                      </div>
+                      <h3 className="text-sm sm:text-base font-semibold text-white leading-tight truncate">
+                        {selectedReport.sourceName}
+                      </h3>
+                      <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-neutral-400">
+                        <span>{selectedReport.lastTestedAt}</span>
+                        {selectedReport.distanceKm !== undefined && (
+                          <>
+                            <span>•</span>
+                            <span className="text-cyan-300 font-medium">
+                              {geocodingService.formatDistance(selectedReport.distanceKm)} away
+                            </span>
+                          </>
+                        )}
+                        <span>•</span>
+                        <span>
+                          By {selectedReport.authorName || 'AquaSense Contributor'}
+                        </span>
+                      </div>
+                    </div>
 
-                <div className="flex items-center gap-2.5 shrink-0">
-                  <div className="text-right">
-                    <span className="text-2xl font-light text-white font-sans">
-                      {selectedReport.qualityScore}
-                    </span>
-                    <span className="text-[10px] text-neutral-400 font-mono">/100</span>
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <div className="text-right">
+                        <span className="text-2xl font-light text-white font-sans">
+                          {selectedReport.qualityScore}
+                        </span>
+                        <span className="text-[10px] text-neutral-400 font-mono">/100</span>
+                      </div>
+                      <button
+                        onClick={() => setIsMobileSheetOpen(false)}
+                        className="p-1.5 rounded-xl text-neutral-400 hover:text-white bg-white/5"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Sensor snapshot */}
+                  <div className="grid grid-cols-4 gap-1.5 text-center text-xs p-2.5 rounded-xl bg-[#090B0E] border border-white/5">
+                    <div>
+                      <span className="text-[9px] text-neutral-500 block font-mono">pH</span>
+                      <span className="font-semibold text-white">{selectedReport.ph}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-neutral-500 block font-mono">TDS</span>
+                      <span className="font-semibold text-white">{selectedReport.tds} ppm</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-neutral-500 block font-mono">CLARITY</span>
+                      <span className="font-semibold text-white">{selectedReport.turbidity} NTU</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-neutral-500 block font-mono">TEMP</span>
+                      <span className="font-semibold text-white">{selectedReport.temperature}°C</span>
+                    </div>
+                  </div>
+
+                  {selectedReport.notes && (
+                    <p className="text-xs text-neutral-300 leading-relaxed bg-[#090B0E] p-2.5 rounded-xl border border-white/5 italic">
+                      "{selectedReport.notes}"
+                    </p>
+                  )}
+
+                  {/* Verification Button */}
                   <button
-                    onClick={() => setIsMobileSheetOpen(false)}
-                    className="p-1.5 rounded-xl text-neutral-400 hover:text-white bg-white/5"
+                    onClick={() => handleToggleVerification(selectedReport)}
+                    className={`w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all border touch-target cursor-pointer ${selectedReport.userHasVerified
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                      : 'bg-white/[0.04] text-white border-white/10'
+                      }`}
                   >
-                    <X className="w-4 h-4" />
+                    <ThumbsUp className="w-3.5 h-3.5" />
+                    <span>
+                      {selectedReport.userHasVerified ? '✓ Verified by You' : 'Verify This Water Source'}{' '}
+                      ({selectedReport.verifiedReports} verifications)
+                    </span>
                   </button>
-                </div>
+                </motion.div>
               </div>
-
-              {/* Sensor snapshot */}
-              <div className="grid grid-cols-4 gap-1.5 text-center text-xs p-2.5 rounded-xl bg-[#090B0E] border border-white/5">
-                <div>
-                  <span className="text-[9px] text-neutral-500 block font-mono">pH</span>
-                  <span className="font-semibold text-white">{selectedReport.ph}</span>
-                </div>
-                <div>
-                  <span className="text-[9px] text-neutral-500 block font-mono">TDS</span>
-                  <span className="font-semibold text-white">{selectedReport.tds} ppm</span>
-                </div>
-                <div>
-                  <span className="text-[9px] text-neutral-500 block font-mono">CLARITY</span>
-                  <span className="font-semibold text-white">{selectedReport.turbidity} NTU</span>
-                </div>
-                <div>
-                  <span className="text-[9px] text-neutral-500 block font-mono">TEMP</span>
-                  <span className="font-semibold text-white">{selectedReport.temperature}°C</span>
-                </div>
-              </div>
-
-              {selectedReport.notes && (
-                <p className="text-xs text-neutral-300 leading-relaxed bg-[#090B0E] p-2.5 rounded-xl border border-white/5 italic">
-                  "{selectedReport.notes}"
-                </p>
-              )}
-
-              {/* Verification Button */}
-              <button
-                onClick={() => handleToggleVerification(selectedReport)}
-                className={`w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all border touch-target cursor-pointer ${
-                  selectedReport.userHasVerified
-                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-                    : 'bg-white/[0.04] text-white border-white/10'
-                }`}
-              >
-                <ThumbsUp className="w-3.5 h-3.5" />
-                <span>
-                  {selectedReport.userHasVerified ? '✓ Verified by You' : 'Verify This Water Source'}{' '}
-                  ({selectedReport.verifiedReports} verifications)
-                </span>
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+            )}
+          </AnimatePresence>
         </div>
       )}
     </div>
