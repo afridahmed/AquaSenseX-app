@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { AICoachMessage } from '../../types';
 import { useBottle } from '../../context/BottleContext';
 import { useAuth } from '../../context/AuthContext';
@@ -193,7 +194,55 @@ export const AICoachScreen: React.FC = () => {
                         : 'bg-[#090B0E] border border-white/5 text-[#F8FAFC] rounded-tl-sm shadow-inner'
                     }`}
                   >
-                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                    {isUser ? (
+                      <div className="whitespace-pre-wrap">{msg.content}</div>
+                    ) : (
+                      <ReactMarkdown
+                        components={{
+                          h1: ({ children }) => (
+                            <p className="text-[#00D1FF] font-semibold text-xs sm:text-sm mb-1 mt-0.5">{children}</p>
+                          ),
+                          h2: ({ children }) => (
+                            <p className="text-[#00D1FF] font-semibold text-xs sm:text-sm mb-1 mt-0.5">{children}</p>
+                          ),
+                          h3: ({ children }) => (
+                            <p className="text-neutral-200 font-semibold text-xs sm:text-sm mb-0.5 mt-1">{children}</p>
+                          ),
+                          h4: ({ children }) => (
+                            <p className="text-neutral-300 font-medium text-xs mb-0.5 mt-0.5">{children}</p>
+                          ),
+                          p: ({ children }) => (
+                            <p className="text-[#F8FAFC] text-xs sm:text-sm leading-relaxed mb-1.5 last:mb-0">{children}</p>
+                          ),
+                          strong: ({ children }) => (
+                            <strong className="text-white font-semibold">{children}</strong>
+                          ),
+                          em: ({ children }) => (
+                            <em className="text-neutral-300 italic">{children}</em>
+                          ),
+                          ul: ({ children }) => (
+                            <ul className="my-1 ml-3 space-y-0.5 list-none">{children}</ul>
+                          ),
+                          ol: ({ children }) => (
+                            <ol className="my-1 ml-3 space-y-0.5 list-decimal list-inside">{children}</ol>
+                          ),
+                          li: ({ children }) => (
+                            <li className="text-xs sm:text-sm text-[#F8FAFC] leading-relaxed flex gap-1.5 items-start">
+                              <span className="text-[#00D1FF] mt-1 shrink-0 text-[8px]">●</span>
+                              <span>{children}</span>
+                            </li>
+                          ),
+                          code: ({ children }) => (
+                            <code className="bg-white/10 text-[#00D1FF] px-1 py-0.5 rounded text-[10px] font-mono">{children}</code>
+                          ),
+                          hr: () => (
+                            <hr className="border-white/10 my-2" />
+                          ),
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    )}
                     <span
                       className={`text-[9px] block mt-1.5 font-mono ${
                         isUser ? 'text-[#090B0E]/70 text-right' : 'text-neutral-500'

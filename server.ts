@@ -43,10 +43,8 @@ async function startServer() {
     systemInstruction?: string
   ): Promise<string | null> {
     const candidateModels = [
-      'gemini-3.7-flash',
-      'gemini-2.5-flash',
-      'gemini-flash-latest',
-      'gemini-3.1-flash-lite',
+      'gemini-3.5-flash-lite',
+      'gemini-2.0-flash',
     ];
 
     for (let i = 0; i < candidateModels.length; i++) {
@@ -103,33 +101,35 @@ async function startServer() {
     consumed: number,
     bottleData: any = {}
   ): string {
-    const remaining = Math.max(0, hydrationGoal - consumed);
-    const pct = Math.round((consumed / hydrationGoal) * 100);
-    const ph = bottleData.ph || 7.2;
-    const tds = bottleData.tds || 180;
-    const temp = bottleData.temperature || 21;
+    const safeGoal = hydrationGoal > 0 ? hydrationGoal : 2500;
+    const safeConsumed = Number.isFinite(consumed) && consumed >= 0 ? consumed : 0;
+    const remaining = Math.max(0, safeGoal - safeConsumed);
+    const pct = Math.round((safeConsumed / safeGoal) * 100);
 
     if (bottleData.qualityScore && bottleData.qualityScore < 70) {
       return `Water quality alert (${bottleData.qualityScore}/100): Check filter integrity or refill from a trusted source before drinking.`;
     }
 
-    if (temp > 26) {
-      return `Water is warm (${temp}°C). Chilling your water slightly (15–20°C) can enhance gastric emptying and rapid hydration.`;
+    if (typeof bottleData.temperature === 'number' && bottleData.temperature > 26) {
+      return `Water is warm (${bottleData.temperature}°C). Chilling your water slightly (15–20°C) can enhance gastric emptying and rapid hydration.`;
     }
 
     if (pct < 30) {
-      return `Good morning! You've logged ${consumed} ml (${pct}% of goal). An early 300 ml glass jumpstarts cellular hydration.`;
+      return `You've logged ${safeConsumed} ml (${pct}% of goal). An early 300 ml glass jumpstarts cellular hydration.`;
     }
 
     if (pct >= 100) {
-      return `Target achieved (${consumed} ml logged)! Maintain light sips to replenish natural metabolic water loss.`;
+      return `Target achieved (${safeConsumed} ml logged)! Maintain light sips to replenish natural metabolic water loss.`;
     }
 
     if (pct >= 75) {
-      return `Almost there! You have ${remaining} ml left to hit your ${hydrationGoal} ml target for today.`;
+      return `Almost there! You have ${remaining} ml left to hit your ${safeGoal} ml target for today.`;
     }
 
-    return `At ${pct}% daily progress (${consumed} ml). Your water pH (${ph}) and TDS (${tds} ppm) are balanced for smooth cellular uptake.`;
+    const phInfo = typeof bottleData.ph === 'number' ? ` Your water pH (${bottleData.ph})` : '';
+    const tdsInfo = typeof bottleData.tds === 'number' ? ` and TDS (${bottleData.tds} ppm)` : '';
+    const sensorNote = phInfo ? `${phInfo}${tdsInfo} are balanced for smooth cellular uptake.` : '';
+    return `At ${pct}% daily progress (${safeConsumed} ml). ${sensorNote}`.trim();
   }
 
   // AI Hydration Tip endpoint
@@ -140,13 +140,18 @@ async function startServer() {
       const ai = getAI();
 
       if (ai) {
+        const tipWaterLevel = typeof bottleData.waterLevel === 'number' ? `${bottleData.waterLevel} ml` : 'unavailable';
+        const tipTemperature = typeof bottleData.temperature === 'number' ? `${bottleData.temperature}°C` : 'unavailable';
+        const tipQuality = typeof bottleData.qualityScore === 'number' ? `${bottleData.qualityScore}/100` : 'unavailable';
+        const tipPh = typeof bottleData.ph === 'number' ? `${bottleData.ph}` : 'unavailable';
+        const tipTds = typeof bottleData.tds === 'number' ? `${bottleData.tds} ppm` : 'unavailable';
         const prompt = `You are AquaSense X, an intelligent, calm, and trustworthy water safety and hydration AI assistant.
 User Context:
 - Hydration Goal: ${hydrationGoal} ml
 - Consumed Today: ${consumed} ml
-- Water Level: ${bottleData.waterLevel || 0} ml
-- Water Temperature: ${bottleData.temperature || 21}°C
-- Water Quality Score: ${bottleData.qualityScore || 90}/100 (pH: ${bottleData.ph || 7.2}, TDS: ${bottleData.tds || 180} ppm)
+- Water Level: ${tipWaterLevel}
+- Water Temperature: ${tipTemperature}
+- Water Quality Score: ${tipQuality} (pH: ${tipPh}, TDS: ${tipTds})
 - Current Time: ${new Date().toLocaleTimeString()}
 
 Generate a single concise, actionable hydration or water quality tip (1-2 sentences maximum). Be friendly, motivating, and factual. Do not give medical diagnoses.`;
@@ -215,27 +220,37 @@ CRITICAL GUIDELINES:
       }
 
       // Contextual fallback response if Gemini is unavailable or rate-limited
+      const qs = typeof bottleData.qualityScore === 'number' ? `${bottleData.qualityScore}/100` : 'unavailable';
+      const qc = bottleData.qualityCategory || 'unavailable';
+      const ph = typeof bottleData.ph === 'number' ? `${bottleData.ph}` : 'unavailable';
+      const tds = typeof bottleData.tds === 'number' ? `${bottleData.tds} ppm` : 'unavailable';
+      const turb = typeof bottleData.turbidity === 'number' ? `${bottleData.turbidity} NTU` : 'unavailable';
+      const temp = typeof bottleData.temperature === 'number' ? `${bottleData.temperature}°C` : 'unavailable';
+      const consumed = Number.isFinite(hydration.consumed) && hydration.consumed >= 0 ? hydration.consumed : 0;
+      const goal = hydration.goal > 0 ? hydration.goal : 2500;
+      const pct = hydration.percent ?? Math.round((consumed / goal) * 100);
+
       let responseContent =
         `I am your AquaSense X Coach. Based on your current sensor telemetry:\n\n` +
-        `• **Quality Score**: ${bottleData.qualityScore || 92}/100 (${bottleData.qualityCategory || 'Excellent'})\n` +
-        `• **pH Level**: ${bottleData.ph || 7.2} (Ideal balanced range: 6.5 - 8.5)\n` +
-        `• **TDS**: ${bottleData.tds || 180} ppm (Clean, mineralized drinkable water)\n` +
-        `• **Turbidity**: ${bottleData.turbidity || 0.4} NTU (Crystal clear)\n` +
-        `• **Hydration**: ${hydration.consumed || 1200} ml / ${hydration.goal || 2500} ml (${Math.round(((hydration.consumed || 1200) / (hydration.goal || 2500)) * 100)}%)\n\n` +
-        `Your water readings show safe, high-clarity drinking water. *Note: Sensor readings provide rapid quality screening and do not replace certified medical or lab testing.*`;
+        `• **Quality Score**: ${qs} (${qc})\n` +
+        `• **pH Level**: ${ph} (Ideal balanced range: 6.5 - 8.5)\n` +
+        `• **TDS**: ${tds} (Clean, mineralized drinkable water)\n` +
+        `• **Turbidity**: ${turb}\n` +
+        `• **Hydration**: ${consumed} ml / ${goal} ml (${pct}%)\n\n` +
+        `*Note: Sensor readings provide rapid quality screening and do not replace certified medical or lab testing.*`;
 
       const msgLower = message.toLowerCase();
       if (msgLower.includes('safe') || msgLower.includes('drink')) {
-        responseContent = `Your water has a Quality Score of **${bottleData.qualityScore || 92}/100** with a pH of **${bottleData.ph || 7.2}** and TDS of **${bottleData.tds || 180} ppm**, indicating balanced, low-turbidity drinking water. Ensure your bottle cap UV/sensor chamber is cleaned weekly for optimal accuracy.`;
+        responseContent = `Your water quality score is **${qs}** with a pH of **${ph}** and TDS of **${tds}**. Ensure your bottle cap UV/sensor chamber is cleaned weekly for optimal accuracy.`;
       } else if (msgLower.includes('tds')) {
-        responseContent = `**TDS (Total Dissolved Solids)** measures dissolved minerals, salts, and organic compounds in parts per million (ppm). Your current reading of **${bottleData.tds || 180} ppm** is in the optimal drinking range (50–300 ppm), which provides desirable taste and essential trace electrolytes without excessive mineral hardness.`;
+        responseContent = `**TDS (Total Dissolved Solids)** measures dissolved minerals, salts, and organic compounds in parts per million (ppm). Your current reading is **${tds}**. The optimal drinking range is 50–300 ppm.`;
       } else if (msgLower.includes('turbidity')) {
-        responseContent = `**Turbidity** measures the cloudiness or particulate matter in water (in NTU). Clean drinking water should ideally stay below **1.0 NTU**. Your bottle reads **${bottleData.turbidity || 0.4} NTU**, which is exceptionally clear!`;
+        responseContent = `**Turbidity** measures the cloudiness or particulate matter in water (in NTU). Clean drinking water should ideally stay below **1.0 NTU**. Your bottle reads **${turb}**.`;
       } else if (msgLower.includes('temperature') || msgLower.includes('temp') || msgLower.includes('cold') || msgLower.includes('warm')) {
-        responseContent = `Your current water temperature is **${bottleData.temperature || 21}°C**. Cool water (15–20°C) is generally absorbed most rapidly by the body during activity.`;
+        responseContent = `Your current water temperature is **${temp}**. Cool water (15–20°C) is generally absorbed most rapidly by the body during activity.`;
       } else if (msgLower.includes('goal') || msgLower.includes('more') || msgLower.includes('how much')) {
-        const rem = Math.max(0, (hydration.goal || 2500) - (hydration.consumed || 0));
-        responseContent = `You have logged **${hydration.consumed || 0} ml** toward your **${hydration.goal || 2500} ml** goal (**${hydration.percent || 0}%**). You have **${rem} ml** remaining to reach peak daily hydration balance.`;
+        const rem = Math.max(0, goal - consumed);
+        responseContent = `You have logged **${consumed} ml** toward your **${goal} ml** goal (**${pct}%**). You have **${rem} ml** remaining to reach peak daily hydration balance.`;
       }
 
       res.json({
