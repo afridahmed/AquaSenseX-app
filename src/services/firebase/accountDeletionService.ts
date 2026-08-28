@@ -161,6 +161,22 @@ export async function deleteUserAccountAndAllData(
     recordStep('Delete User Hydration Logs Subcollection', 'failed', undefined, err.message);
   }
 
+  // STEP 4b: Delete user fcmTokens subcollection (users/{uid}/fcmTokens/*)
+  try {
+    const userTokensCol = collection(db, 'users', currentUid, 'fcmTokens');
+    const snap = await getDocs(userTokensCol);
+    if (!snap.empty) {
+      const batch = writeBatch(db);
+      snap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+      recordStep('Delete User FCM Tokens Subcollection', 'success', `Removed ${snap.size} FCM token records`);
+    } else {
+      recordStep('Delete User FCM Tokens Subcollection', 'skipped', 'No FCM tokens found');
+    }
+  } catch (err: any) {
+    recordStep('Delete User FCM Tokens Subcollection', 'failed', undefined, err.message);
+  }
+
   // STEP 5: Delete top-level hydrationLogs collection (hydrationLogs where uid == currentUid)
   try {
     const topLogsCol = collection(db, 'hydrationLogs');

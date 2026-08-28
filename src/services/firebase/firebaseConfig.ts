@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getMessaging, isSupported, Messaging } from 'firebase/messaging';
 import firebaseConfig from '../../../firebase-applet-config.json';
 
 // Initialize Firebase App
@@ -20,6 +21,42 @@ export const googleAuthProvider = new GoogleAuthProvider();
 googleAuthProvider.setCustomParameters({
   prompt: 'select_account',
 });
+
+// Lazy & safe Firebase Cloud Messaging initialization guarded by isSupported()
+let messagingInstance: Messaging | null = null;
+let messagingChecked = false;
+
+export async function getFirebaseMessaging(): Promise<Messaging | null> {
+  if (typeof window === 'undefined') return null;
+  if (messagingChecked) return messagingInstance;
+
+  try {
+    const supported = await isSupported();
+    if (supported) {
+      messagingInstance = getMessaging(app);
+    }
+  } catch (err) {
+    console.warn('Firebase Messaging isSupported() check:', err);
+    messagingInstance = null;
+  } finally {
+    messagingChecked = true;
+  }
+
+  return messagingInstance;
+}
+
+/**
+ * Retrieve the Firebase Web Push VAPID Public Key from environment or applet config
+ */
+export function getVapidPublicKey(): string | undefined {
+  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_VAPID_KEY) {
+    return String(import.meta.env.VITE_FIREBASE_VAPID_KEY).trim();
+  }
+  if ((firebaseConfig as any).vapidKey) {
+    return String((firebaseConfig as any).vapidKey).trim();
+  }
+  return undefined;
+}
 
 /**
  * Human-friendly error translation for Firebase Authentication and Firestore errors

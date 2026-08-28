@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useBottle } from '../../context/BottleContext';
 import { useTheme } from '../../context/ThemeContext';
 import { Header } from '../../components/common/Header';
+import { NotificationPreferences } from '../../types';
+import { notificationService } from '../../services/notifications/notificationService';
 import {
   User,
   Droplets,
@@ -23,6 +25,7 @@ import {
   Eye,
   EyeOff,
   Loader2,
+  Clock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -45,15 +48,33 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
   const [deleteError, setDeleteError] = useState<string>('');
   const [showDeletePassword, setShowDeletePassword] = useState<boolean>(false);
   const [isReleasingBottle, setIsReleasingBottle] = useState<boolean>(false);
-  const [notificationState, setNotificationState] = useState(
-    user?.notifications || {
-      drinkReminders: true,
-      waterQualityAlerts: true,
-      nearbyCommunitySourceAlerts: true,
-      lowBatteryAlerts: true,
-    }
-  );
+  const [notificationState, setNotificationState] = useState<NotificationPreferences>(() => {
+    const raw = user?.notificationSettings || user?.notifications;
+    return {
+      drinkReminders: Boolean(raw?.drinkReminders),
+      drinkReminderStart: raw?.drinkReminderStart || '08:00',
+      drinkReminderEnd: raw?.drinkReminderEnd || '22:00',
+      drinkReminderIntervalMinutes: raw?.drinkReminderIntervalMinutes || 60,
+      lowBatteryAlerts: Boolean(raw?.lowBatteryAlerts),
+    };
+  });
   const [notificationToast, setNotificationToast] = useState<string>('');
+
+  // Keep notificationState synchronized with current user profile
+  useEffect(() => {
+    if (user) {
+      const settings = user.notificationSettings || user.notifications;
+      if (settings) {
+        setNotificationState({
+          drinkReminders: Boolean(settings.drinkReminders),
+          drinkReminderStart: settings.drinkReminderStart || '08:00',
+          drinkReminderEnd: settings.drinkReminderEnd || '22:00',
+          drinkReminderIntervalMinutes: settings.drinkReminderIntervalMinutes || 60,
+          lowBatteryAlerts: Boolean(settings.lowBatteryAlerts),
+        });
+      }
+    }
+  }, [user?.uid, user?.notificationSettings]);
 
   const handleGoalPreset = async (val: number) => {
     setTempGoal(val);
@@ -69,30 +90,145 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
     setTimeout(() => setIsSavedGoal(false), 1500);
   };
 
-  const handleToggleNotification = async (key: keyof typeof notificationState) => {
-    const updated = { ...notificationState, [key]: !notificationState[key] };
-    setNotificationState(updated);
-    if (user) {
-      await updateUserProfile({ notifications: updated });
+  const handleToggleNotification = async (key: keyof NotificationPreferences) => {
+    if (!user) return;
+
+    const previousState = { ...notificationState };
+    const targetValue = !notificationState[key];
+
+    // If enabling a setting, check/request browser notification permission non-blockingly
+    if (targetValue) {
+      const permissionStatus = notificationService.getPermissionStatus();
+
+      if (permissionStatus === 'unsupported') {
+        setNotificationToast('ℹ️ Web notifications are not supported on this browser, but your preference is saved.');
+        setTimeout(() => setNotificationToast(''), 4500);
+      } else if (permissionStatus === 'denied') {
+        setNotificationToast(
+          '⚠️ Notifications are blocked in your browser settings. Preference saved for your AquaSense X account.'
+        );
+        setTimeout(() => setNotificationToast(''), 5500);
+      } else if (permissionStatus === 'default') {
+        try {
+          const requested = await notificationService.requestPermission();
+          if (requested === 'denied') {
+            setNotificationToast(
+              '⚠️ Notification permission was not granted. Preference saved for your AquaSense X account.'
+            );
+            setTimeout(() => setNotificationToast(''), 5500);
+          }
+        } catch {
+          // non-blocking
+        }
+      }
     }
 
-    if (updated[key] && 'Notification' in window) {
-      if (Notification.permission !== 'granted') {
-        Notification.requestPermission();
+    const updated: NotificationPreferences = {
+      ...notificationState,
+      [key]: targetValue,
+    };
+
+    // Immediate optimistic local state update
+    setNotificationState(updated);
+
+    try {
+      // Save exclusively to canonical users/{uid}.notificationSettings field
+      await updateUserProfile({ notificationSettings: updated });
+
+      // If user enabled a setting and permission is granted, attempt background FCM token registration
+      if (targetValue && user?.uid && notificationService.getPermissionStatus() === 'granted') {
+        notificationService.requestFCMToken(user.uid).catch((err) => {
+          console.warn('FCM token registration background warning:', err);
+        });
       }
+    } catch (err: any) {
+      console.error('Failed to save notification settings:', err);
+      // Revert state on failure
+      setNotificationState(previousState);
+      setNotificationToast(
+        err?.message ? `⚠️ ${err.message}` : '⚠️ Could not save notification setting. Please try again.'
+      );
+      setTimeout(() => setNotificationToast(''), 4500);
     }
   };
 
-  const triggerTestNotification = () => {
-    setNotificationToast('💧 AquaSense X: Water Purity 94/100. Time for an afternoon hydration sip!');
-    setTimeout(() => setNotificationToast(''), 4000);
+  const handleScheduleChange = async (
+    field: 'drinkReminderStart' | 'drinkReminderEnd' | 'drinkReminderIntervalMinutes',
+    value: string | number
+  ) => {
+    if (!user) return;
 
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification('AquaSense X Alert', {
-        body: '💧 Water Purity 94/100. Time for an afternoon hydration sip!',
-        icon: '/favicon.ico',
-      });
+    let validValue: string | number = value;
+    if (field === 'drinkReminderStart' || field === 'drinkReminderEnd') {
+      if (typeof value !== 'string' || !/^([01]\d|2[0-3]):([0-5]\d)$/.test(value)) {
+        return;
+      }
+      validValue = value;
+    } else if (field === 'drinkReminderIntervalMinutes') {
+      const num = Number(value);
+      if (![15, 30, 60, 90, 120].includes(num)) {
+        return;
+      }
+      validValue = num;
     }
+
+    const previousState = { ...notificationState };
+    const updated: NotificationPreferences = {
+      ...notificationState,
+      [field]: validValue,
+    };
+
+    setNotificationState(updated);
+
+    try {
+      await updateUserProfile({ notificationSettings: updated });
+    } catch (err: any) {
+      console.error('Failed to save reminder schedule:', err);
+      setNotificationState(previousState);
+      setNotificationToast(
+        err?.message ? `⚠️ ${err.message}` : '⚠️ Could not save reminder schedule. Please try again.'
+      );
+      setTimeout(() => setNotificationToast(''), 4500);
+    }
+  };
+
+  const triggerTestNotification = async () => {
+    const permissionStatus = notificationService.getPermissionStatus();
+
+    if (permissionStatus === 'unsupported') {
+      setNotificationToast('ℹ️ Web notifications are not supported on this browser.');
+      setTimeout(() => setNotificationToast(''), 4500);
+      return;
+    }
+
+    if (permissionStatus === 'denied') {
+      setNotificationToast(
+        '⚠️ Notifications are blocked. Please allow notifications in your browser settings to test alerts.'
+      );
+      setTimeout(() => setNotificationToast(''), 5500);
+      return;
+    }
+
+    if (permissionStatus === 'default') {
+      const requested = await notificationService.requestPermission();
+      if (requested !== 'granted') {
+        setNotificationToast('⚠️ Permission is required to send notifications.');
+        setTimeout(() => setNotificationToast(''), 4500);
+        return;
+      }
+    }
+
+    const result = notificationService.sendLocalNotification('AquaSense X Alert', {
+      body: '💧 Water Purity 94/100. Time for an afternoon hydration sip!',
+      icon: '/favicon.ico',
+    });
+
+    if (result.success) {
+      setNotificationToast('💧 Test notification sent to your system notification tray.');
+    } else {
+      setNotificationToast(result.error ? `⚠️ ${result.error}` : '⚠️ Unable to display notification.');
+    }
+    setTimeout(() => setNotificationToast(''), 4500);
   };
 
   return (
@@ -301,49 +437,102 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
                 desc: 'Prompt when hydration falls behind daily target',
               },
               {
-                key: 'waterQualityAlerts' as const,
-                title: 'Water Quality Alerts',
-                desc: 'Instant alert when unusual pH, TDS, or turbidity is detected',
-              },
-              {
-                key: 'nearbyCommunitySourceAlerts' as const,
-                title: 'Nearby Safe Water Source Alerts',
-                desc: 'Notify when verified clean hydration stations are within 500m',
-              },
-              {
                 key: 'lowBatteryAlerts' as const,
                 title: 'Low Bottle Battery Warning',
                 desc: 'Alert when ESP32-S3 battery drops below 20%',
               },
             ].map((n) => {
               const checked = !!notificationState[n.key];
+              const isDrinkReminder = n.key === 'drinkReminders';
+
               return (
-                <div key={n.key} className="flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-[#090B0E] border border-white/5 gap-3.5">
-                  <div className="min-w-0 flex-1 pr-1">
-                    <p className="text-xs sm:text-sm font-semibold text-slate-100 truncate">{n.title}</p>
-                    <p className="text-[11px] sm:text-xs text-neutral-400 leading-relaxed mt-0.5">{n.desc}</p>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={checked}
-                    aria-label={n.title}
-                    onClick={() => handleToggleNotification(n.key)}
-                    className={`w-[44px] h-[24px] sm:w-[48px] sm:h-[26px] rounded-full relative shrink-0 transition-all duration-200 ease-out active:scale-[0.96] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#090B0E] cursor-pointer ${
-                      checked
-                        ? 'bg-[#0284C7] border border-[#38BDF8]/40 hover:bg-[#0369A1]'
-                        : 'bg-[#181D24] border border-white/[0.08] hover:border-white/[0.16]'
-                    }`}
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={`absolute left-[2px] top-1/2 -translate-y-1/2 w-[18px] h-[18px] sm:w-[20px] sm:h-[20px] rounded-full transition-all duration-200 ease-out pointer-events-none ${
+                <div key={n.key} className="p-3 sm:p-3.5 rounded-2xl bg-[#090B0E] border border-white/5 space-y-3">
+                  <div className="flex items-center justify-between gap-3.5">
+                    <div className="min-w-0 flex-1 pr-1">
+                      <p className="text-xs sm:text-sm font-semibold text-slate-100 truncate">{n.title}</p>
+                      <p className="text-[11px] sm:text-xs text-neutral-400 leading-relaxed mt-0.5">{n.desc}</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={checked}
+                      aria-label={n.title}
+                      onClick={() => handleToggleNotification(n.key)}
+                      className={`w-[44px] h-[24px] sm:w-[48px] sm:h-[26px] rounded-full relative shrink-0 transition-all duration-200 ease-out active:scale-[0.96] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#090B0E] cursor-pointer ${
                         checked
-                          ? 'translate-x-[20px] sm:translate-x-[22px] bg-[#F8FAFC] shadow-[0_1px_3px_rgba(0,0,0,0.3)]'
-                          : 'translate-x-0 bg-[#7E8B9B] shadow-sm'
+                          ? 'bg-[#0284C7] border border-[#38BDF8]/40 hover:bg-[#0369A1]'
+                          : 'bg-[#181D24] border border-white/[0.08] hover:border-white/[0.16]'
                       }`}
-                    />
-                  </button>
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`absolute left-[2px] top-1/2 -translate-y-1/2 w-[18px] h-[18px] sm:w-[20px] sm:h-[20px] rounded-full transition-all duration-200 ease-out pointer-events-none ${
+                          checked
+                            ? 'translate-x-[20px] sm:translate-x-[22px] bg-[#F8FAFC] shadow-[0_1px_3px_rgba(0,0,0,0.3)]'
+                            : 'translate-x-0 bg-[#7E8B9B] shadow-sm'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Schedule Controls (Rendered when Smart Drink Reminders is enabled) */}
+                  {isDrinkReminder && checked && (
+                    <div className="pt-2.5 border-t border-white/5 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium text-neutral-300 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-[#00D1FF]" />
+                          Reminder Active Window
+                        </span>
+                        <span className="text-[10px] text-neutral-500 font-mono">
+                          {notificationState.drinkReminderStart || '08:00'} – {notificationState.drinkReminderEnd || '22:00'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] text-neutral-400 mb-1">Start Time</label>
+                          <input
+                            type="time"
+                            value={notificationState.drinkReminderStart || '08:00'}
+                            onChange={(e) => handleScheduleChange('drinkReminderStart', e.target.value)}
+                            className="w-full bg-[#12161C] border border-white/10 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#00D1FF]/50 transition-colors"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-neutral-400 mb-1">End Time</label>
+                          <input
+                            type="time"
+                            value={notificationState.drinkReminderEnd || '22:00'}
+                            onChange={(e) => handleScheduleChange('drinkReminderEnd', e.target.value)}
+                            className="w-full bg-[#12161C] border border-white/10 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#00D1FF]/50 transition-colors"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 mb-1.5">Reminder Interval</label>
+                        <div className="grid grid-cols-5 gap-1 xs:gap-1.5">
+                          {[15, 30, 60, 90, 120].map((mins) => {
+                            const isSelected = (notificationState.drinkReminderIntervalMinutes || 60) === mins;
+                            return (
+                              <button
+                                key={mins}
+                                type="button"
+                                onClick={() => handleScheduleChange('drinkReminderIntervalMinutes', mins)}
+                                className={`py-1.5 px-1 rounded-xl text-center text-[11px] font-medium transition-all duration-150 border ${
+                                  isSelected
+                                    ? 'bg-[#00D1FF]/20 text-[#00D1FF] border-[#00D1FF]/40 shadow-sm font-semibold'
+                                    : 'bg-[#12161C] text-neutral-400 border-white/5 hover:text-white hover:bg-white/[0.04]'
+                                }`}
+                              >
+                                {mins < 60 ? `${mins}m` : `${mins / 60}h`}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

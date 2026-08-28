@@ -14,10 +14,18 @@ export interface UserProfile {
 
 export interface NotificationPreferences {
   drinkReminders: boolean;
-  waterQualityAlerts: boolean;
-  nearbyCommunitySourceAlerts: boolean;
+  drinkReminderStart: string; // HH:mm format, e.g. "08:00"
+  drinkReminderEnd: string; // HH:mm format, e.g. "22:00"
+  drinkReminderIntervalMinutes: number; // 15 | 30 | 60 | 90 | 120
   lowBatteryAlerts: boolean;
-  fcmToken?: string;
+}
+
+export interface FCMTokenRecord {
+  token: string;
+  platform: 'web' | 'ios' | 'android';
+  userAgent: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface BottleData {

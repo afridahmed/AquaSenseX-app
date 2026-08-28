@@ -49,11 +49,37 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const DEFAULT_NOTIFICATIONS: NotificationPreferences = {
-  drinkReminders: true,
-  waterQualityAlerts: true,
-  nearbyCommunitySourceAlerts: true,
-  lowBatteryAlerts: true,
+export const DEFAULT_NOTIFICATIONS: NotificationPreferences = {
+  drinkReminders: false,
+  drinkReminderStart: '08:00',
+  drinkReminderEnd: '22:00',
+  drinkReminderIntervalMinutes: 60,
+  lowBatteryAlerts: false,
+};
+
+const VALID_INTERVALS = [15, 30, 60, 90, 120];
+
+const isValidTime = (time?: string): boolean => {
+  if (!time || typeof time !== 'string') return false;
+  return /^([01]\d|2[0-3]):([0-5]\d)$/.test(time.trim());
+};
+
+const normalizeNotificationSettings = (data?: Partial<UserProfile> | null): NotificationPreferences => {
+  const raw = data?.notificationSettings || data?.notifications || DEFAULT_NOTIFICATIONS;
+
+  const start = isValidTime(raw.drinkReminderStart) ? raw.drinkReminderStart.trim() : '08:00';
+  const end = isValidTime(raw.drinkReminderEnd) ? raw.drinkReminderEnd.trim() : '22:00';
+  const interval = VALID_INTERVALS.includes(Number(raw.drinkReminderIntervalMinutes))
+    ? Number(raw.drinkReminderIntervalMinutes)
+    : 60;
+
+  return {
+    drinkReminders: Boolean(raw.drinkReminders),
+    drinkReminderStart: start,
+    drinkReminderEnd: end,
+    drinkReminderIntervalMinutes: interval,
+    lowBatteryAlerts: Boolean(raw.lowBatteryAlerts),
+  };
 };
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -81,12 +107,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (userSnap.exists()) {
             const data = userSnap.data() as UserProfile;
             if (isMounted) {
+              const settings = normalizeNotificationSettings(data);
               setUser({
                 ...data,
                 // Ensure photoUrl from Google Auth is captured if not present in doc
                 photoUrl: data.photoUrl || fbUser.photoURL || undefined,
-                notificationSettings: data.notificationSettings || data.notifications || DEFAULT_NOTIFICATIONS,
-                notifications: data.notificationSettings || data.notifications || DEFAULT_NOTIFICATIONS,
+                notificationSettings: settings,
+                notifications: settings,
               });
             }
           } else {
@@ -164,10 +191,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (userSnap.exists()) {
         const data = userSnap.data() as UserProfile;
+        const settings = normalizeNotificationSettings(data);
         setUser({
           ...data,
-          notificationSettings: data.notificationSettings || data.notifications || DEFAULT_NOTIFICATIONS,
-          notifications: data.notificationSettings || data.notifications || DEFAULT_NOTIFICATIONS,
+          notificationSettings: settings,
+          notifications: settings,
         });
       } else {
         const newProfile: UserProfile = {
@@ -253,11 +281,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (userSnap.exists()) {
         const data = userSnap.data() as UserProfile;
+        const settings = normalizeNotificationSettings(data);
         setUser({
           ...data,
           photoUrl: fbUser.photoURL || data.photoUrl || undefined,
-          notificationSettings: data.notificationSettings || data.notifications || DEFAULT_NOTIFICATIONS,
-          notifications: data.notificationSettings || data.notifications || DEFAULT_NOTIFICATIONS,
+          notificationSettings: settings,
+          notifications: settings,
         });
       } else {
         const newProfile: UserProfile = {
@@ -340,24 +369,51 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Update user profile fields in Firestore
   const updateUserProfile = async (partial: Partial<UserProfile>) => {
-    if (!user) return;
+    if (!user || !auth.currentUser) {
+      throw new Error('You must be signed in to update your profile.');
+    }
+
+    const previousUser = user;
     const updated: UserProfile = {
       ...user,
       ...partial,
       updatedAt: new Date().toISOString(),
     };
 
+    // Optimistic local state update
     setUser(updated);
 
     try {
       const userRef = doc(db, 'users', user.uid);
-      await updateDoc(userRef, {
-        ...partial,
+
+      // Clean payload to ensure no undefined values reach Firestore
+      const cleanData: Record<string, any> = {
         updatedAt: new Date().toISOString(),
         serverUpdatedAt: serverTimestamp(),
-      });
-    } catch (err) {
+      };
+
+      for (const [key, value] of Object.entries(partial)) {
+        if (value !== undefined) {
+          if (key === 'notificationSettings' && typeof value === 'object' && value !== null) {
+            const cleanSettings: Record<string, any> = {};
+            for (const [sKey, sVal] of Object.entries(value)) {
+              if (sVal !== undefined) {
+                cleanSettings[sKey] = sVal;
+              }
+            }
+            cleanData[key] = cleanSettings;
+          } else {
+            cleanData[key] = value;
+          }
+        }
+      }
+
+      await updateDoc(userRef, cleanData);
+    } catch (err: any) {
       console.error('Error updating user profile in Firestore:', err);
+      // Rollback on failure
+      setUser(previousUser);
+      throw new Error(getFirebaseErrorMessage(err));
     }
   };
 
