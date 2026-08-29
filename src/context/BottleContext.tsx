@@ -148,20 +148,23 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     ? {
         ...bottle,
         online: isOnline,
-        ph: isOnline ? (bottle.ph ?? 7.0) : 7.0,
-        tds: isOnline ? (bottle.tds ?? 0) : 0,
-        turbidity: isOnline ? (bottle.turbidity ?? 0.0) : 0.0,
-        temperature: isOnline ? (bottle.temperature ?? 20.0) : 20.0,
+        ph: isOnline ? (bottle.ph ?? null) : null,
+        tds: isOnline ? (bottle.tds ?? null) : null,
+        turbidity: isOnline ? (bottle.turbidity ?? null) : null,
+        temperature: isOnline ? (bottle.temperature ?? null) : null,
+        qualityScore: isOnline ? (bottle.qualityScore ?? null) : null,
+        qualityCategory: isOnline ? (bottle.qualityCategory ?? 'Good') : 'Offline',
         isStale: !isOnline,
       }
     : null;
 
-  // Compute live quality evaluation
+  // Compute live quality evaluation (sets to null/offline state when offline)
   const qualityEval: WaterQualityEvaluation = evaluateWaterQuality({
-    ph: effectiveBottle?.ph ?? 7.0,
-    tds: effectiveBottle?.tds ?? 0,
-    turbidity: effectiveBottle?.turbidity ?? 0.0,
-    temperature: effectiveBottle?.temperature ?? 20.0,
+    isOffline: !isOnline,
+    ph: isOnline ? (effectiveBottle?.ph ?? null) : null,
+    tds: isOnline ? (effectiveBottle?.tds ?? null) : null,
+    turbidity: isOnline ? (effectiveBottle?.turbidity ?? null) : null,
+    temperature: isOnline ? (effectiveBottle?.temperature ?? null) : null,
   });
 
   // Check if data is stale (> 15s without update or bottle offline)
@@ -169,6 +172,11 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // Fetch AI hydration tip
   const refreshAiTip = useCallback(async () => {
+    if (!isOnline) {
+      setAiTip('AquaSense X is currently offline. Reconnect your bottle or transmit telemetry to receive live AI purity & hydration insights.');
+      return;
+    }
+
     try {
       const response = await fetch('/api/ai/tip', {
         method: 'POST',
@@ -193,7 +201,7 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const pct = Math.round((todayConsumed / hydrationGoal) * 100);
       setAiTip(`You're at ${pct}% of your daily target. Drink steadily throughout the day.`);
     }
-  }, [hydrationGoal, todayConsumed, bottle, qualityEval.score]);
+  }, [isOnline, hydrationGoal, todayConsumed, bottle, qualityEval.score]);
 
   useEffect(() => {
     const timer = setTimeout(() => {

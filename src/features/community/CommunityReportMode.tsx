@@ -25,12 +25,14 @@ import {
   Thermometer,
   Eye,
   Activity,
+  WifiOff,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface CommunityReportModeProps {
   onSuccessPublish: (report: CommunityReport) => void;
   onCancel?: () => void;
+  online?: boolean;
 }
 
 // Mini interactive map for pinning and fine-tuning report location within 100m
@@ -180,9 +182,12 @@ const ReportBoundaryMap: React.FC<{
 
 export const CommunityReportMode: React.FC<CommunityReportModeProps> = ({
   onSuccessPublish,
+  onCancel,
+  online = true,
 }) => {
   const { bottle, qualityEval } = useBottle();
   const { user } = useAuth();
+  const isDeviceOnline = online && (bottle?.online ?? false);
 
   const [sourceName, setSourceName] = useState<string>('');
   const [sourceType, setSourceType] = useState<CommunityReport['sourceType']>('fountain');
@@ -554,34 +559,54 @@ export const CommunityReportMode: React.FC<CommunityReportModeProps> = ({
         </div>
 
         {/* Right Column: Sensor Telemetry & Report Details Form (6 cols on lg) */}
-        <div className="lg:col-span-6 bg-[#12161C] p-3.5 sm:p-5 rounded-2xl sm:rounded-[28px] border border-white/5 shadow-2xl flex flex-col justify-between space-y-4">
+        <div className={`lg:col-span-6 bg-[#12161C] p-3.5 sm:p-5 rounded-2xl sm:rounded-[28px] border border-white/5 shadow-2xl flex flex-col justify-between space-y-4 transition-opacity ${!isDeviceOnline ? 'opacity-70' : ''}`}>
           {/* Header */}
           <div className="flex items-center justify-between pb-2.5 border-b border-white/10">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center">
-                <FlaskConical className="w-4 h-4 text-[#00D1FF]" />
+              <div
+                className={`w-8 h-8 rounded-xl border flex items-center justify-center ${
+                  isDeviceOnline
+                    ? 'bg-cyan-500/15 border-cyan-500/30 text-[#00D1FF]'
+                    : 'bg-white/5 border-white/10 text-neutral-500'
+                }`}
+              >
+                {isDeviceOnline ? <FlaskConical className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-white">Live Sensor Readings</h3>
-                <p className="text-[11px] text-neutral-400">Captured from {bottle?.bottleId || 'AquaSense X'}</p>
+                <h3 className="text-sm font-semibold text-white">
+                  {isDeviceOnline ? 'Live Sensor Readings' : 'Sensor Telemetry Offline'}
+                </h3>
+                <p className="text-[11px] text-neutral-400">
+                  {isDeviceOnline
+                    ? `Captured from ${bottle?.bottleId || 'AquaSense X'}`
+                    : 'Connect bottle to capture live sensor telemetry'}
+                </p>
               </div>
             </div>
 
             {/* Quality Badge */}
             <div className="text-right">
-              <span className="text-xl font-light text-white font-sans">{qualityEval.score}</span>
-              <span className="text-[10px] text-neutral-400 font-mono">/100</span>
-              <span
-                className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border block mt-0.5 ${
-                  qualityEval.score >= 88
-                    ? 'text-[#00D1FF] border-[#00D1FF]/30 bg-[#00D1FF]/10'
-                    : qualityEval.score >= 70
-                    ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
-                    : 'text-amber-300 border-amber-500/30 bg-amber-500/10'
-                }`}
-              >
-                {qualityEval.score >= 88 ? 'Excellent' : qualityEval.score >= 70 ? 'Good' : 'Caution'}
-              </span>
+              {isDeviceOnline ? (
+                <>
+                  <span className="text-xl font-light text-white font-sans">{qualityEval.score}</span>
+                  <span className="text-[10px] text-neutral-400 font-mono">/100</span>
+                  <span
+                    className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border block mt-0.5 ${
+                      qualityEval.score >= 88
+                        ? 'text-[#00D1FF] border-[#00D1FF]/30 bg-[#00D1FF]/10'
+                        : qualityEval.score >= 70
+                        ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+                        : 'text-amber-300 border-amber-500/30 bg-amber-500/10'
+                    }`}
+                  >
+                    {qualityEval.score >= 88 ? 'Excellent' : qualityEval.score >= 70 ? 'Good' : 'Caution'}
+                  </span>
+                </>
+              ) : (
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-neutral-800 text-neutral-400 border border-neutral-700 block">
+                  Offline · --
+                </span>
+              )}
             </div>
           </div>
 
@@ -589,31 +614,51 @@ export const CommunityReportMode: React.FC<CommunityReportModeProps> = ({
           <div className="grid grid-cols-4 gap-1.5 sm:gap-2 text-center text-xs p-2.5 rounded-xl bg-[#090B0E] border border-white/5">
             <div className="p-1.5 rounded-lg bg-white/[0.02]">
               <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 mb-0.5">
-                <Activity className="w-3 h-3 text-[#00D1FF]" />
+                <Activity className={`w-3 h-3 ${isDeviceOnline ? 'text-[#00D1FF]' : 'text-neutral-500'}`} />
                 <span className="font-mono">pH</span>
               </div>
-              <span className="font-semibold text-white text-sm">{bottle?.ph ?? 7.2}</span>
+              <span className="font-semibold text-white text-sm">
+                {isDeviceOnline && bottle?.ph != null ? bottle.ph : '--'}
+              </span>
             </div>
             <div className="p-1.5 rounded-lg bg-white/[0.02]">
               <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 mb-0.5">
-                <Droplets className="w-3 h-3 text-cyan-400" />
+                <Droplets className={`w-3 h-3 ${isDeviceOnline ? 'text-cyan-400' : 'text-neutral-500'}`} />
                 <span className="font-mono">TDS</span>
               </div>
-              <span className="font-semibold text-white text-sm">{bottle?.tds ?? 180} <span className="text-[9px] font-normal text-neutral-400">ppm</span></span>
+              <span className="font-semibold text-white text-sm">
+                {isDeviceOnline && bottle?.tds != null ? (
+                  <>
+                    {bottle.tds} <span className="text-[9px] font-normal text-neutral-400">ppm</span>
+                  </>
+                ) : (
+                  '--'
+                )}
+              </span>
             </div>
             <div className="p-1.5 rounded-lg bg-white/[0.02]">
               <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 mb-0.5">
-                <Eye className="w-3 h-3 text-amber-400" />
+                <Eye className={`w-3 h-3 ${isDeviceOnline ? 'text-amber-400' : 'text-neutral-500'}`} />
                 <span className="font-mono">CLARITY</span>
               </div>
-              <span className="font-semibold text-white text-sm">{bottle?.turbidity ?? 0.4} <span className="text-[9px] font-normal text-neutral-400">NTU</span></span>
+              <span className="font-semibold text-white text-sm">
+                {isDeviceOnline && bottle?.turbidity != null ? (
+                  <>
+                    {bottle.turbidity} <span className="text-[9px] font-normal text-neutral-400">NTU</span>
+                  </>
+                ) : (
+                  '--'
+                )}
+              </span>
             </div>
             <div className="p-1.5 rounded-lg bg-white/[0.02]">
               <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 mb-0.5">
-                <Thermometer className="w-3 h-3 text-emerald-400" />
+                <Thermometer className={`w-3 h-3 ${isDeviceOnline ? 'text-emerald-400' : 'text-neutral-500'}`} />
                 <span className="font-mono">TEMP</span>
               </div>
-              <span className="font-semibold text-white text-sm">{bottle?.temperature ?? 21}°C</span>
+              <span className="font-semibold text-white text-sm">
+                {isDeviceOnline && bottle?.temperature != null ? `${bottle.temperature}°C` : '--'}
+              </span>
             </div>
           </div>
 
@@ -629,7 +674,8 @@ export const CommunityReportMode: React.FC<CommunityReportModeProps> = ({
                 value={sourceName}
                 onChange={(e) => setSourceName(e.target.value)}
                 placeholder="e.g. Yerba Buena Gardens Water Fountain #2"
-                className="w-full bg-[#090B0E] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50 transition-colors"
+                disabled={!isDeviceOnline}
+                className="w-full bg-[#090B0E] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 required
               />
             </div>
@@ -644,8 +690,9 @@ export const CommunityReportMode: React.FC<CommunityReportModeProps> = ({
                   <button
                     key={cat.id}
                     type="button"
+                    disabled={!isDeviceOnline}
                     onClick={() => setSourceType(cat.id)}
-                    className={`py-1.5 px-2 rounded-xl text-[11px] font-medium transition-all text-center border cursor-pointer ${
+                    className={`py-1.5 px-2 rounded-xl text-[11px] font-medium transition-all text-center border cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                       sourceType === cat.id
                         ? 'bg-[#00D1FF]/15 text-[#00D1FF] border-[#00D1FF]/50 font-semibold'
                         : 'bg-[#090B0E] text-neutral-400 hover:text-white border-white/5 hover:border-white/15'
@@ -666,8 +713,9 @@ export const CommunityReportMode: React.FC<CommunityReportModeProps> = ({
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={2}
+                disabled={!isDeviceOnline}
                 placeholder="e.g. Crisp and cold, fast refill flow rate, well maintained..."
-                className="w-full bg-[#090B0E] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50 transition-colors resize-none"
+                className="w-full bg-[#090B0E] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50 transition-colors resize-none disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
 
@@ -676,17 +724,24 @@ export const CommunityReportMode: React.FC<CommunityReportModeProps> = ({
               <button
                 type="submit"
                 disabled={
+                  !isDeviceOnline ||
                   isSubmitting ||
                   locStatus !== 'success' ||
                   !deviceGps ||
                   !reportCoords
                 }
+                title={!isDeviceOnline ? 'Connect your AquaSense X device to submit water quality reports' : undefined}
                 className="w-full py-3 px-4 rounded-xl bg-[#00D1FF] hover:bg-[#00B4D8] active:bg-[#0096B4] text-[#090B0E] text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#00D1FF]/25 active:scale-98 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed touch-target"
               >
                 {isSubmitting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-[#090B0E]" />
                     <span>Publishing to Community...</span>
+                  </>
+                ) : !isDeviceOnline ? (
+                  <>
+                    <WifiOff className="w-4 h-4" />
+                    <span>Connect Bottle to Report</span>
                   </>
                 ) : (
                   <>

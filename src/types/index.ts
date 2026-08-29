@@ -34,17 +34,17 @@ export interface BottleData {
   ownerUid: string | null;
   online: boolean;
   battery: number; // 0 - 100 %
-  temperature: number; // °C
-  tds: number; // ppm
-  turbidity: number; // NTU
-  ph: number; // 0 - 14
+  temperature: number | null; // °C
+  tds: number | null; // ppm
+  turbidity: number | null; // NTU
+  ph: number | null; // 0 - 14
   waterLevel: number; // in ml, e.g. 0 - 750 ml
   maxCapacity?: number; // e.g. 750 ml
   lastUpdated: string;
   lastSyncTimestamp?: string;
   isDevelopment?: boolean;
-  qualityScore?: number;
-  qualityCategory?: WaterQualityCategory;
+  qualityScore?: number | null;
+  qualityCategory?: WaterQualityCategory | 'Offline';
   isStale?: boolean;
 }
 
@@ -52,12 +52,12 @@ export interface SensorReading {
   id?: string;
   uid?: string;
   bottleId: string;
-  temperature: number;
-  tds: number;
-  turbidity: number;
-  ph: number;
+  temperature: number | null;
+  tds: number | null;
+  turbidity: number | null;
+  ph: number | null;
   waterLevel: number;
-  qualityScore: number;
+  qualityScore: number | null;
   timestamp: string;
   notes?: string;
 }
@@ -104,7 +104,7 @@ export type WaterQualityCategory = 'Excellent' | 'Good' | 'Caution' | 'Poor';
 
 export interface QualityParameterDetail {
   name: string;
-  value: number;
+  value: number | null | undefined;
   unit: string;
   status: 'optimal' | 'acceptable' | 'warning' | 'danger';
   idealRange: string;
@@ -113,8 +113,8 @@ export interface QualityParameterDetail {
 }
 
 export interface WaterQualityEvaluation {
-  score: number; // 0 - 100
-  category: WaterQualityCategory;
+  score: number | null; // 0 - 100 or null when offline
+  category: WaterQualityCategory | 'Offline';
   headline: string;
   description: string;
   colorClass: string;

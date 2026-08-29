@@ -24,6 +24,7 @@ import {
   Check,
   RefreshCw,
   Info,
+  WifiOff,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -472,35 +473,59 @@ export const UnknownSourceTestModal: React.FC<UnknownSourceTestModalProps> = ({
             </div>
           ) : (
             <form onSubmit={handlePublishToCommunity} className="mt-3 space-y-3">
+              {/* Offline Warning Banner */}
+              {!bottle?.online && (
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-2.5 text-amber-300">
+                  <WifiOff className="w-4 h-4 shrink-0 text-amber-400" />
+                  <p className="text-xs">
+                    <span className="font-semibold">Device offline</span> — connect bottle to scan new water source.
+                  </p>
+                </div>
+              )}
+
               {/* 1. Captured Sensor Telemetry (Single-Line Concept on Mobile) */}
-              <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-[#090B0E] border border-white/10 space-y-2">
+              <div className={`p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-[#090B0E] border border-white/10 space-y-2 transition-opacity ${!bottle?.online ? 'opacity-60' : ''}`}>
                 <div className="flex items-center justify-between gap-2 flex-nowrap">
                   <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-400 shrink-0">
                     Captured Sensor Telemetry
                   </span>
-                  <span
-                    className={`text-xs font-semibold px-2 py-0.5 rounded-full ${qualityEval.badgeBg} ${qualityEval.badgeText} border border-current/20 whitespace-nowrap shrink-0`}
-                  >
-                    {qualityEval.score}/100 · {qualityEval.category}
-                  </span>
+                  {bottle?.online ? (
+                    <span
+                      className={`text-xs font-semibold px-2 py-0.5 rounded-full ${qualityEval.badgeBg} ${qualityEval.badgeText} border border-current/20 whitespace-nowrap shrink-0`}
+                    >
+                      {qualityEval.score}/100 · {qualityEval.category}
+                    </span>
+                  ) : (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400 border border-neutral-700 whitespace-nowrap shrink-0">
+                      Offline · --
+                    </span>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-4 gap-1.5 sm:gap-2 text-center">
                   <div className="py-1.5 px-1 rounded-lg bg-white/[0.03] border border-white/5">
                     <span className="text-[9px] text-neutral-400 block font-mono">pH</span>
-                    <span className="font-semibold text-xs sm:text-sm text-white font-sans">{bottle?.ph ?? 7.2}</span>
+                    <span className="font-semibold text-xs sm:text-sm text-white font-sans">
+                      {bottle?.online && bottle?.ph != null ? bottle.ph : '--'}
+                    </span>
                   </div>
                   <div className="py-1.5 px-1 rounded-lg bg-white/[0.03] border border-white/5">
                     <span className="text-[9px] text-neutral-400 block font-mono">TDS</span>
-                    <span className="font-semibold text-xs sm:text-sm text-white font-sans">{bottle?.tds ?? 180} <span className="text-[9px] text-neutral-400 font-normal">ppm</span></span>
+                    <span className="font-semibold text-xs sm:text-sm text-white font-sans">
+                      {bottle?.online && bottle?.tds != null ? `${bottle.tds} ppm` : '--'}
+                    </span>
                   </div>
                   <div className="py-1.5 px-1 rounded-lg bg-white/[0.03] border border-white/5">
                     <span className="text-[9px] text-neutral-400 block font-mono">TURB</span>
-                    <span className="font-semibold text-xs sm:text-sm text-white font-sans">{bottle?.turbidity ?? 0.4} <span className="text-[9px] text-neutral-400 font-normal">NTU</span></span>
+                    <span className="font-semibold text-xs sm:text-sm text-white font-sans">
+                      {bottle?.online && bottle?.turbidity != null ? `${bottle.turbidity} NTU` : '--'}
+                    </span>
                   </div>
                   <div className="py-1.5 px-1 rounded-lg bg-white/[0.03] border border-white/5">
                     <span className="text-[9px] text-neutral-400 block font-mono">TEMP</span>
-                    <span className="font-semibold text-xs sm:text-sm text-white font-sans">{bottle?.temperature ?? 21}°C</span>
+                    <span className="font-semibold text-xs sm:text-sm text-white font-sans">
+                      {bottle?.online && bottle?.temperature != null ? `${bottle.temperature}°C` : '--'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -706,13 +731,19 @@ export const UnknownSourceTestModal: React.FC<UnknownSourceTestModalProps> = ({
                 <button
                   id="btn-modal-share-community"
                   type="submit"
-                  disabled={isSubmitting || locStatus !== 'success' || !reportCoords}
-                  className="w-full py-3 px-4 rounded-xl bg-[#00D1FF] hover:bg-[#00B4D8] active:bg-[#0096B4] text-[#090B0E] text-xs sm:text-sm font-semibold shadow-lg shadow-[#00D1FF]/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50 touch-target cursor-pointer"
+                  disabled={isSubmitting || locStatus !== 'success' || !reportCoords || !bottle?.online}
+                  title={!bottle?.online ? 'Device offline — connect bottle to scan new water source' : undefined}
+                  className="w-full py-3 px-4 rounded-xl bg-[#00D1FF] hover:bg-[#00B4D8] active:bg-[#0096B4] text-[#090B0E] text-xs sm:text-sm font-semibold shadow-lg shadow-[#00D1FF]/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50 touch-target cursor-pointer disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin shrink-0" />
                       <span>Publishing to Map...</span>
+                    </>
+                  ) : !bottle?.online ? (
+                    <>
+                      <WifiOff className="w-4 h-4 shrink-0" />
+                      <span>Device Offline · Connect Bottle</span>
                     </>
                   ) : (
                     <>

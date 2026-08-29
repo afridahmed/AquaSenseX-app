@@ -69,6 +69,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           aiTip={aiTip}
           onRefreshTip={refreshAiTip}
           onNavigateToCoach={onNavigateToTab ? () => onNavigateToTab('coach') : undefined}
+          online={bottle?.online}
         />
 
         {/* 4. 2 × 2 Sensor Reading Grid (Cohesive hardware telemetry matrix) */}
@@ -77,8 +78,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             <h2 className="text-[10px] sm:text-[11px] font-bold tracking-wider text-neutral-400 uppercase">
               Live Sensor Telemetry
             </h2>
-            <span className="text-[10px] sm:text-[11px] text-neutral-500 font-mono">
-              {bottle?.online ? 'Live Telemetry' : 'Cached Offline'}
+            <span
+              className={`text-[10px] sm:text-[11px] font-mono px-2 py-0.5 rounded-full border ${
+                bottle?.online
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  : 'bg-neutral-800 text-neutral-400 border-neutral-700/60'
+              }`}
+            >
+              {bottle?.online ? 'Live Telemetry' : 'Device Offline'}
             </span>
           </div>
 
@@ -89,7 +96,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         </div>
 
         {/* 5. Test & Report Water (Directly after Sensor Reading Grid) */}
-        <TestWaterActionCard onOpenTestModal={() => setIsTestModalOpen(true)} />
+        <TestWaterActionCard
+          onOpenTestModal={() => setIsTestModalOpen(true)}
+          online={bottle?.online}
+        />
 
         {/* 6. Combined Bottle Water Level + Hydration Module */}
         <CombinedBottleHydrationCard

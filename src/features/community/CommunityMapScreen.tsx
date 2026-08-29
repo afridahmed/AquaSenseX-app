@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CommunityReport } from '../../types';
 import { useAuth } from '../../context/AuthContext';
+import { useBottle } from '../../context/BottleContext';
 import { Header } from '../../components/common/Header';
 import {
   LeafletCommunityMap,
@@ -46,6 +47,7 @@ import {
   Waves,
   Check,
   ChevronRight,
+  WifiOff,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -62,6 +64,7 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
   initialMode = 'explore',
 }) => {
   const { user } = useAuth();
+  const { bottle } = useBottle();
 
   // Mode state: Explore vs Report
   const [mode, setMode] = useState<CommunityMode>(initialMode);
@@ -530,10 +533,11 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
             id="mode-switch-explore-btn"
             type="button"
             onClick={() => setMode('explore')}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${mode === 'explore'
-              ? 'bg-[#181E26] text-[#00D1FF] border border-[#00D1FF]/40 shadow-sm shadow-[#00D1FF]/15'
-              : 'text-neutral-400 hover:text-white border border-transparent'
-              }`}
+            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              mode === 'explore'
+                ? 'bg-[#181E26] text-[#00D1FF] border border-[#00D1FF]/40 shadow-sm shadow-[#00D1FF]/15'
+                : 'text-neutral-400 hover:text-white border border-transparent'
+            }`}
           >
             <Compass className="w-4 h-4" />
             <span>Explore</span>
@@ -542,21 +546,53 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
             id="mode-switch-report-btn"
             type="button"
             onClick={() => setMode('report')}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${mode === 'report'
-              ? 'bg-[#181E26] text-[#00D1FF] border border-[#00D1FF]/40 shadow-sm shadow-[#00D1FF]/15'
-              : 'text-neutral-400 hover:text-white border border-transparent'
-              }`}
+            title={!bottle?.online ? 'Connect your AquaSense X device to submit water quality reports' : undefined}
+            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              mode === 'report'
+                ? 'bg-[#181E26] text-[#00D1FF] border border-[#00D1FF]/40 shadow-sm shadow-[#00D1FF]/15'
+                : 'text-neutral-400 hover:text-white border border-transparent'
+            }`}
           >
-            <FlaskConical className="w-4 h-4" />
+            {bottle?.online ? <FlaskConical className="w-4 h-4" /> : <WifiOff className="w-4 h-4 text-neutral-400" />}
             <span>Report</span>
+            {!bottle?.online && (
+              <span className="hidden xs:inline-block text-[9px] px-1.5 py-0.2 rounded-full bg-neutral-800 text-neutral-400 font-normal border border-neutral-700">
+                Offline
+              </span>
+            )}
           </button>
         </div>
       </div>
+
+      {/* Offline Restriction Banner for Report Mode */}
+      {mode === 'report' && !bottle?.online && (
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-300 shadow-xl">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+              <WifiOff className="w-4 h-4 text-amber-400" />
+            </div>
+            <div>
+              <h4 className="text-xs sm:text-sm font-semibold text-white">Device Offline</h4>
+              <p className="text-xs text-amber-300/90">
+                Connect your AquaSense X device to submit water quality reports.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMode('explore')}
+            className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold self-start sm:self-auto transition-colors cursor-pointer"
+          >
+            Back to Explore
+          </button>
+        </div>
+      )}
 
       {/* 2. MODE CONTENT */}
       {mode === 'report' ? (
         /* REPORT MODE: Strict physical location acquisition & report submission */
         <CommunityReportMode
+          online={bottle?.online}
           onSuccessPublish={(newReport) => {
             setReports((prev) => [newReport, ...prev.filter((r) => r.id !== newReport.id)]);
             setSelectedReport(newReport);

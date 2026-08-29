@@ -216,17 +216,83 @@ function evaluateTemperature(temp: number, thresholds = DEFAULT_QUALITY_THRESHOL
  */
 export function evaluateWaterQuality(
   params: {
-    ph: number;
-    tds: number;
-    turbidity: number;
-    temperature: number;
+    ph?: number | null;
+    tds?: number | null;
+    turbidity?: number | null;
+    temperature?: number | null;
+    isOffline?: boolean;
   },
   thresholds = DEFAULT_QUALITY_THRESHOLDS
 ): WaterQualityEvaluation {
-  const phDetail = evaluatePh(params.ph, thresholds.ph);
-  const tdsDetail = evaluateTds(params.tds, thresholds.tds);
-  const turbidityDetail = evaluateTurbidity(params.turbidity, thresholds.turbidity);
-  const tempDetail = evaluateTemperature(params.temperature, thresholds.temperature);
+  // If explicitly flagged offline or all critical sensor telemetry is null/undefined
+  const isOffline =
+    params.isOffline ||
+    params.ph === null ||
+    params.ph === undefined ||
+    params.tds === null ||
+    params.tds === undefined ||
+    params.turbidity === null ||
+    params.turbidity === undefined ||
+    params.temperature === null ||
+    params.temperature === undefined;
+
+  if (isOffline) {
+    return {
+      score: null,
+      category: 'Offline',
+      headline: 'DEVICE OFFLINE',
+      description: 'AquaSense X device is currently offline. Connect your bottle or stream telemetry to view active purity screening.',
+      colorClass: 'text-neutral-400',
+      badgeBg: 'bg-neutral-800/80 border-neutral-700/60',
+      badgeText: 'text-neutral-300',
+      parameters: {
+        ph: {
+          name: 'pH Level',
+          value: null,
+          unit: 'pH',
+          status: 'optimal',
+          idealRange: `${thresholds.ph.acceptableMin} – ${thresholds.ph.acceptableMax}`,
+          description: 'Sensor offline. Waiting for telemetry sync.',
+          scoreContribution: 0,
+        },
+        tds: {
+          name: 'TDS (Dissolved Solids)',
+          value: null,
+          unit: 'ppm',
+          status: 'optimal',
+          idealRange: '< 300 ppm',
+          description: 'Sensor offline. Waiting for telemetry sync.',
+          scoreContribution: 0,
+        },
+        turbidity: {
+          name: 'Turbidity (Clarity)',
+          value: null,
+          unit: 'NTU',
+          status: 'optimal',
+          idealRange: '< 1.0 NTU',
+          description: 'Sensor offline. Waiting for telemetry sync.',
+          scoreContribution: 0,
+        },
+        temperature: {
+          name: 'Temperature',
+          value: null,
+          unit: '°C',
+          status: 'optimal',
+          idealRange: '4°C – 20°C',
+          description: 'Sensor offline. Waiting for telemetry sync.',
+          scoreContribution: 0,
+        },
+      },
+      safetyDisclaimer:
+        'AquaSense X is currently offline. Connect your bottle to resume real-time multi-spectral sensor screening.',
+      isDrinkable: false,
+    };
+  }
+
+  const phDetail = evaluatePh(params.ph!, thresholds.ph);
+  const tdsDetail = evaluateTds(params.tds!, thresholds.tds);
+  const turbidityDetail = evaluateTurbidity(params.turbidity!, thresholds.turbidity);
+  const tempDetail = evaluateTemperature(params.temperature!, thresholds.temperature);
 
   // Weighted total
   const rawScore =

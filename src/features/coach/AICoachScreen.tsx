@@ -14,6 +14,7 @@ import {
   ShieldAlert,
   HelpCircle,
   Droplets,
+  WifiOff,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -119,7 +120,9 @@ export const AICoachScreen: React.FC = () => {
       const fallbackMsg: AICoachMessage = {
         id: `ai_${Date.now()}`,
         role: 'assistant',
-        content: `Your water quality score is **${qualityEval.score}/100** with a pH of **${bottle?.ph || 7.2}** and TDS of **${bottle?.tds || 180} ppm**. Continue drinking regularly to reach your goal of ${hydrationGoal} ml.`,
+        content: bottle?.online
+          ? `Your water quality score is **${qualityEval.score}/100** with a pH of **${bottle?.ph || 7.2}** and TDS of **${bottle?.tds || 180} ppm**. Continue drinking regularly to reach your goal of ${hydrationGoal} ml.`
+          : `AquaSense X device is currently **Offline**. Live sensor telemetry is unavailable. You have consumed **${todayConsumed} / ${hydrationGoal} ml** (${hydrationPercent}%) of your daily target today.`,
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, fallbackMsg]);
@@ -143,17 +146,39 @@ export const AICoachScreen: React.FC = () => {
 
       <div className="p-3.5 xs:p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto w-full flex-1 flex flex-col space-y-3.5 sm:space-y-4">
         {/* Context Telemetry Badge */}
-        <div className="p-3.5 sm:p-4 rounded-[22px] sm:rounded-[26px] bg-[#12161C] border border-white/5 flex flex-wrap items-center justify-between gap-3 shadow-xl">
+        <div
+          className={`p-3.5 sm:p-4 rounded-[22px] sm:rounded-[26px] bg-[#12161C] border flex flex-wrap items-center justify-between gap-3 shadow-xl transition-all ${
+            bottle?.online ? 'border-white/5' : 'border-neutral-800/80 opacity-75'
+          }`}
+        >
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-[#00D1FF]/10 border border-[#00D1FF]/20 flex items-center justify-center shrink-0">
-              <Cpu className="w-4 h-4 text-[#00D1FF]" />
+            <div
+              className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${
+                bottle?.online
+                  ? 'bg-[#00D1FF]/10 border-[#00D1FF]/20 text-[#00D1FF]'
+                  : 'bg-white/5 border-white/10 text-neutral-500'
+              }`}
+            >
+              {bottle?.online ? <Cpu className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
             </div>
             <div className="min-w-0">
-              <span className="text-[10px] uppercase font-semibold text-[#00D1FF] tracking-wider block">
-                Active Telemetry Context
+              <span
+                className={`text-[10px] uppercase font-semibold tracking-wider block ${
+                  bottle?.online ? 'text-[#00D1FF]' : 'text-neutral-400'
+                }`}
+              >
+                {bottle?.online ? 'Active Telemetry Context' : 'Offline Mode · Telemetry Inactive'}
               </span>
               <p className="text-[11px] sm:text-xs text-neutral-400 font-mono truncate">
-                {qualityEval.score} Score • {bottle?.ph} pH • {bottle?.tds} ppm TDS • {bottle?.turbidity} NTU • {todayConsumed}/{hydrationGoal} ml ({hydrationPercent}%)
+                {bottle?.online ? (
+                  <>
+                    {qualityEval.score} Score • {bottle?.ph} pH • {bottle?.tds} ppm TDS • {bottle?.turbidity} NTU • {todayConsumed}/{hydrationGoal} ml ({hydrationPercent}%)
+                  </>
+                ) : (
+                  <>
+                    Device Offline • Sensor telemetry unavailable • {todayConsumed}/{hydrationGoal} ml ({hydrationPercent}%)
+                  </>
+                )}
               </p>
             </div>
           </div>
