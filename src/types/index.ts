@@ -4,6 +4,7 @@ export interface UserProfile {
   email: string;
   photoUrl?: string;
   bottleId: string | null;
+  assignedBottleId?: string | null;
   hydrationGoal: number; // in ml, e.g. 2500
   theme: 'dark' | 'light' | 'system';
   notificationSettings: NotificationPreferences;
@@ -40,6 +41,7 @@ export interface BottleData {
   waterLevel: number; // in ml, e.g. 0 - 750 ml
   maxCapacity?: number; // e.g. 750 ml
   lastUpdated: string;
+  lastSyncTimestamp?: string;
   isDevelopment?: boolean;
   qualityScore?: number;
   qualityCategory?: WaterQualityCategory;

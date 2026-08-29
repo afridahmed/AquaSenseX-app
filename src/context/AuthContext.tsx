@@ -108,8 +108,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const data = userSnap.data() as UserProfile;
             if (isMounted) {
               const settings = normalizeNotificationSettings(data);
+              const resolvedBottleId = data.bottleId || (data as any).assignedBottleId || null;
               setUser({
                 ...data,
+                bottleId: resolvedBottleId,
+                assignedBottleId: resolvedBottleId,
                 // Ensure photoUrl from Google Auth is captured if not present in doc
                 photoUrl: data.photoUrl || fbUser.photoURL || undefined,
                 notificationSettings: settings,
@@ -124,6 +127,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               email: fbUser.email || '',
               photoUrl: fbUser.photoURL || undefined,
               bottleId: null, // First-time user triggers Bottle Pairing screen
+              assignedBottleId: null,
               hydrationGoal: 2500, // Sensible default 2500 ml
               theme: 'dark',
               notificationSettings: DEFAULT_NOTIFICATIONS,
@@ -312,8 +316,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setUser(newProfile);
       }
     } catch (error: any) {
+      const code = error?.code || '';
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+        console.info('Google sign-in popup was closed or cancelled by user.');
+        const customErr = new Error(getFirebaseErrorMessage(error));
+        (customErr as any).code = code;
+        throw customErr;
+      }
       console.error('Firebase Google sign-in error:', error);
-      throw new Error(getFirebaseErrorMessage(error));
+      const customErr = new Error(getFirebaseErrorMessage(error));
+      (customErr as any).code = code;
+      throw customErr;
     } finally {
       setLoading(false);
     }
@@ -451,9 +464,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         serverUpdatedAt: serverTimestamp(),
       });
 
-      // 4. Update user profile with new bottleId
+      // 4. Update user profile with new bottleId and assignedBottleId
       transaction.update(userRef, {
         bottleId: cleaned,
+        assignedBottleId: cleaned,
         updatedAt: new Date().toISOString(),
         serverUpdatedAt: serverTimestamp(),
       });
@@ -465,6 +479,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         ? {
             ...prev,
             bottleId: cleaned,
+            assignedBottleId: cleaned,
             updatedAt: new Date().toISOString(),
           }
         : null
@@ -483,7 +498,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       await runTransaction(db, async (transaction) => {
         const userSnap = await transaction.get(userDocRef);
-        const currentBottleId = userSnap.exists() ? userSnap.data()?.bottleId : user?.bottleId;
+        const currentBottleId = userSnap.exists()
+          ? (userSnap.data()?.bottleId || userSnap.data()?.assignedBottleId)
+          : (user?.bottleId || user?.assignedBottleId);
 
         if (currentBottleId) {
           const bottleRef = doc(db, 'bottles', currentBottleId);
@@ -503,10 +520,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         }
 
-        // 3. Clear users/{uid}.bottleId
+        // 3. Clear users/{uid}.bottleId and assignedBottleId
         if (userSnap.exists()) {
           transaction.update(userDocRef, {
             bottleId: null,
+            assignedBottleId: null,
             updatedAt: new Date().toISOString(),
             serverUpdatedAt: serverTimestamp(),
           });
@@ -518,6 +536,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           ? {
               ...prev,
               bottleId: null,
+              assignedBottleId: null,
               updatedAt: new Date().toISOString(),
             }
           : null

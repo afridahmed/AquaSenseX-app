@@ -83,7 +83,7 @@ export function getFirebaseErrorMessage(error: any): string {
     case 'auth/user-disabled':
       return 'This account has been disabled. Please contact AquaSense support.';
     case 'auth/popup-closed-by-user':
-      return 'Verification popup was closed before completing.';
+      return 'Sign-in popup was closed before completing.';
     case 'auth/popup-blocked':
       return 'Popup was blocked by your browser or iframe security settings. You can allow popups or use "Wipe Data & Sign Out" below.';
     case 'auth/cancelled-popup-request':

@@ -60,7 +60,11 @@ export const AuthScreen: React.FC = () => {
     try {
       await loginWithGoogle();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Google sign-in was cancelled.');
+      if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
+        // User closed or cancelled the popup dialog intentionally
+        return;
+      }
+      setErrorMsg(err.message || 'Google sign-in could not be completed. Please try again.');
     }
   };
 

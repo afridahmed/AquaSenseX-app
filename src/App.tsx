@@ -59,7 +59,8 @@ const MainAppContent: React.FC = () => {
 
   // Step 4: First-time Onboarding: User has no paired bottle -> Show Bottle Pairing
   // (Pairing is strictly a one-time onboarding step; once paired, user goes straight to dashboard)
-  if (!user.bottleId || isPairingModalOpen) {
+  const hasAssignedBottle = Boolean(user.bottleId || user.assignedBottleId);
+  if (!hasAssignedBottle || isPairingModalOpen) {
     return (
       <BottlePairingScreen
         isChangeBottle={isPairingModalOpen}

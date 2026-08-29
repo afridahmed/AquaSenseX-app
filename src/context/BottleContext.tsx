@@ -49,6 +49,32 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const bottleId = user?.bottleId;
   const hydrationGoal = user?.hydrationGoal || 2500;
+  const [isHardwareTimedOut, setIsHardwareTimedOut] = useState<boolean>(false);
+
+  // 15-second hardware offline watchdog
+  const OFFLINE_WATCHDOG_TIMEOUT_MS = 15000;
+
+  useEffect(() => {
+    const checkWatchdog = () => {
+      if (!bottle) {
+        setIsHardwareTimedOut(false);
+        return;
+      }
+      const syncTimeStr = bottle.lastSyncTimestamp || bottle.lastUpdated;
+      if (!syncTimeStr) {
+        setIsHardwareTimedOut(true);
+        return;
+      }
+      const lastSyncMs = new Date(syncTimeStr).getTime();
+      const elapsed = Date.now() - lastSyncMs;
+      const timedOut = elapsed > OFFLINE_WATCHDOG_TIMEOUT_MS;
+      setIsHardwareTimedOut(timedOut);
+    };
+
+    checkWatchdog();
+    const interval = setInterval(checkWatchdog, 1500);
+    return () => clearInterval(interval);
+  }, [bottle]);
 
   // Listen to user's real Firestore hydration logs
   useEffect(() => {
@@ -116,19 +142,30 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const hydrationPercent = Math.min(100, Math.round((todayConsumed / hydrationGoal) * 100));
   const remainingMl = Math.max(0, hydrationGoal - todayConsumed);
 
+  // Determine effective bottle state with 15-second offline watchdog
+  const isOnline = Boolean(bottle?.online && !isHardwareTimedOut);
+  const effectiveBottle: BottleData | null = bottle
+    ? {
+        ...bottle,
+        online: isOnline,
+        ph: isOnline ? (bottle.ph ?? 7.0) : 7.0,
+        tds: isOnline ? (bottle.tds ?? 0) : 0,
+        turbidity: isOnline ? (bottle.turbidity ?? 0.0) : 0.0,
+        temperature: isOnline ? (bottle.temperature ?? 20.0) : 20.0,
+        isStale: !isOnline,
+      }
+    : null;
+
   // Compute live quality evaluation
   const qualityEval: WaterQualityEvaluation = evaluateWaterQuality({
-    ph: bottle?.ph ?? 7.2,
-    tds: bottle?.tds ?? 180,
-    turbidity: bottle?.turbidity ?? 0.4,
-    temperature: bottle?.temperature ?? 21.0,
+    ph: effectiveBottle?.ph ?? 7.0,
+    tds: effectiveBottle?.tds ?? 0,
+    turbidity: effectiveBottle?.turbidity ?? 0.0,
+    temperature: effectiveBottle?.temperature ?? 20.0,
   });
 
-  // Check if data is stale (> 45s without update and bottle offline)
-  const isStale = !!(
-    bottle &&
-    (!bottle.online || Date.now() - new Date(bottle.lastUpdated).getTime() > 45000)
-  );
+  // Check if data is stale (> 15s without update or bottle offline)
+  const isStale = !isOnline;
 
   // Fetch AI hydration tip
   const refreshAiTip = useCallback(async () => {
@@ -302,7 +339,7 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   return (
     <BottleContext.Provider
       value={{
-        bottle,
+        bottle: effectiveBottle,
         qualityEval,
         hydrationLogs,
         todayConsumed,
