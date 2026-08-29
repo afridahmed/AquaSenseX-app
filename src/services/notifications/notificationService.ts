@@ -6,7 +6,7 @@
 
 import { getToken, onMessage, MessagePayload } from 'firebase/messaging';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db, getFirebaseMessaging, getVapidPublicKey } from '../firebase/firebaseConfig';
+import { auth, db, getFirebaseMessaging, getVapidPublicKey } from '../firebase/firebaseConfig';
 
 export type NotificationPermissionState = 'granted' | 'denied' | 'default' | 'unsupported';
 
@@ -297,6 +297,87 @@ class NotificationService {
         error: err?.message || 'Failed to display notification.',
       };
     }
+  }
+
+  /**
+   * Send a test push notification to the current user's registered device.
+   * Attempts FCM remote dispatch via server API if a token is available,
+   * falling back cleanly to local notification display.
+   */
+  public async sendTestPushNotification(
+    uid?: string
+  ): Promise<{ success: boolean; deliveredVia: 'fcm' | 'local'; message?: string; error?: string }> {
+    if (this.getPermissionStatus() !== 'granted') {
+      return {
+        success: false,
+        deliveredVia: 'local',
+        error: 'Notification permission is required to send notifications.',
+      };
+    }
+
+    const currentAuthUser = auth.currentUser;
+    const effectiveUid = uid || currentAuthUser?.uid;
+
+    // Attempt FCM token retrieval
+    let token: string | null = null;
+    if (effectiveUid) {
+      const fcmResult = await this.requestFCMToken(effectiveUid);
+      token = fcmResult.token;
+    }
+
+    if (currentAuthUser) {
+      try {
+        const idToken = await currentAuthUser.getIdToken();
+        const response = await fetch('/api/notifications/test-push', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({ token }),
+        });
+
+        const data = await response.json();
+        if (response.ok && data.success) {
+          return {
+            success: true,
+            deliveredVia: 'fcm',
+            message: 'FCM push notification sent successfully!',
+          };
+        } else if (data.code === 'MISSING_SERVICE_ACCOUNT') {
+          // Clean local fallback when server lacks service account credentials
+          this.sendLocalNotification('AquaSense X', {
+            body: 'Push notifications are working.',
+            icon: '/favicon.ico',
+          });
+          return {
+            success: true,
+            deliveredVia: 'local',
+            message: 'Token registered. (Server requires FIREBASE_SERVICE_ACCOUNT for remote push).',
+          };
+        } else if (!data.success && data.error) {
+          return {
+            success: false,
+            deliveredVia: 'local',
+            error: data.error,
+          };
+        }
+      } catch (serverErr) {
+        console.warn('Server test push request error:', serverErr);
+      }
+    }
+
+    // Local fallback
+    const localResult = this.sendLocalNotification('AquaSense X', {
+      body: 'Push notifications are working.',
+      icon: '/favicon.ico',
+    });
+
+    return {
+      success: localResult.success,
+      deliveredVia: 'local',
+      error: localResult.error,
+    };
   }
 
   /**

@@ -1,7 +1,9 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 
@@ -12,7 +14,7 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json());
 
@@ -300,6 +302,274 @@ CRITICAL GUIDELINES:
         waterLevel: 680
       }
     });
+  });
+
+  // Server-side OAuth2 token cache for FCM v1 API
+  let cachedOAuthToken: { token: string; expiresAt: number } | null = null;
+
+  async function getGoogleOAuth2AccessToken(sa: { client_email: string; private_key: string }): Promise<string> {
+    const now = Math.floor(Date.now() / 1000);
+    if (cachedOAuthToken && cachedOAuthToken.expiresAt > now + 60) {
+      return cachedOAuthToken.token;
+    }
+
+    const header = { alg: 'RS256', typ: 'JWT' };
+    const claimSet = {
+      iss: sa.client_email,
+      scope: 'https://www.googleapis.com/auth/firebase.messaging',
+      aud: 'https://oauth2.googleapis.com/token',
+      exp: now + 3600,
+      iat: now,
+    };
+
+    const base64UrlEncode = (str: string) => Buffer.from(str).toString('base64url');
+    const unsignedToken = `${base64UrlEncode(JSON.stringify(header))}.${base64UrlEncode(JSON.stringify(claimSet))}`;
+
+    const signer = crypto.createSign('RSA-SHA256');
+    signer.update(unsignedToken);
+    signer.end();
+
+    const signature = signer.sign(sa.private_key, 'base64url');
+    const jwt = `${unsignedToken}.${signature}`;
+
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        assertion: jwt,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OAuth2 token acquisition failed: ${errorText}`);
+    }
+
+    const data = await response.json();
+    cachedOAuthToken = {
+      token: data.access_token,
+      expiresAt: now + (data.expires_in || 3600),
+    };
+
+    return data.access_token;
+  }
+
+  // Load applet config for project ID, API key, and database ID
+  let firebaseAppletConfig: Record<string, any> = {};
+  try {
+    const configPath = path.join(__dirname, 'firebase-applet-config.json');
+    if (fs.existsSync(configPath)) {
+      firebaseAppletConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    }
+  } catch (err) {
+    console.warn('Could not read firebase-applet-config.json:', err);
+  }
+
+  // Securely verify Firebase ID Token using Google Identity Toolkit API
+  async function verifyFirebaseIdToken(idToken: string): Promise<string> {
+    if (!idToken || typeof idToken !== 'string') {
+      throw new Error('Missing or malformed ID token.');
+    }
+
+    const apiKey = firebaseAppletConfig.apiKey || process.env.VITE_FIREBASE_API_KEY;
+    if (!apiKey) {
+      throw new Error('Firebase API key is not configured.');
+    }
+
+    const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      const msg = err?.error?.message || 'Invalid or expired Firebase ID token.';
+      throw new Error(msg);
+    }
+
+    const data = await response.json();
+    const verifiedUser = data?.users?.[0];
+    if (!verifiedUser?.localId) {
+      throw new Error('Unable to derive user identity from Firebase token.');
+    }
+
+    return verifiedUser.localId;
+  }
+
+  // Look up registered tokens for verified user from users/{verifiedUid}/fcmTokens
+  async function getUserFCMTokensFromFirestore(
+    verifiedUid: string,
+    accessToken: string,
+    projectId: string
+  ): Promise<string[]> {
+    try {
+      const databaseId = firebaseAppletConfig.firestoreDatabaseId || '(default)';
+      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${verifiedUid}/fcmTokens`;
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const data = await response.json();
+      if (!data.documents || !Array.isArray(data.documents)) {
+        return [];
+      }
+
+      const tokens: string[] = [];
+      for (const doc of data.documents) {
+        const tokenValue = doc.fields?.token?.stringValue;
+        if (tokenValue) {
+          tokens.push(tokenValue);
+        }
+      }
+      return tokens;
+    } catch (err) {
+      console.warn('Error fetching FCM tokens from Firestore:', err);
+      return [];
+    }
+  }
+
+  // Development FCM test push endpoint (server-side ID-token authenticated)
+  app.post('/api/notifications/test-push', async (req, res) => {
+    try {
+      // 1. Extract Bearer token from Authorization header
+      const authHeader = req.headers.authorization || '';
+      const match = authHeader.match(/^Bearer\s+(.+)$/i);
+      if (!match) {
+        return res.status(401).json({
+          success: false,
+          error: 'Authentication is required. Missing Bearer authorization token.',
+        });
+      }
+      const idToken = match[1].trim();
+
+      // 2. Verify Firebase ID token and derive verifiedUid (rejecting/ignoring client-supplied uid)
+      let verifiedUid: string;
+      try {
+        verifiedUid = await verifyFirebaseIdToken(idToken);
+      } catch (authErr: any) {
+        return res.status(401).json({
+          success: false,
+          error: authErr?.message || 'Authentication failed: Invalid Firebase ID token.',
+        });
+      }
+
+      // 3. Check for server-side service account credentials
+      const saEnv = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.GOOGLE_APPLICATION_CREDENTIALS;
+      if (!saEnv) {
+        return res.status(200).json({
+          success: false,
+          code: 'MISSING_SERVICE_ACCOUNT',
+          error: 'FIREBASE_SERVICE_ACCOUNT is not configured in server environment. Push test executed via local fallback.',
+        });
+      }
+
+      let sa: { project_id?: string; client_email: string; private_key: string };
+      try {
+        if (saEnv.trim().startsWith('{')) {
+          sa = JSON.parse(saEnv);
+        } else {
+          const decoded = Buffer.from(saEnv, 'base64').toString('utf-8');
+          sa = JSON.parse(decoded);
+        }
+      } catch (err: any) {
+        return res.status(500).json({
+          success: false,
+          code: 'INVALID_SERVICE_ACCOUNT',
+          error: 'Failed to parse FIREBASE_SERVICE_ACCOUNT credentials: ' + err.message,
+        });
+      }
+
+      const accessToken = await getGoogleOAuth2AccessToken(sa);
+      const projectId = sa.project_id || firebaseAppletConfig.projectId || 'aquasensex';
+
+      // 4. Query registered tokens under users/{verifiedUid}/fcmTokens
+      const userTokens = await getUserFCMTokensFromFirestore(verifiedUid, accessToken, projectId);
+
+      // Validate that target token belongs to the authenticated user
+      const requestedToken = typeof req.body?.token === 'string' ? req.body.token.trim() : null;
+      let targetToken: string | null = null;
+
+      if (requestedToken) {
+        if (userTokens.includes(requestedToken)) {
+          targetToken = requestedToken;
+        } else {
+          return res.status(403).json({
+            success: false,
+            error: 'Specified device token does not belong to the authenticated user.',
+          });
+        }
+      } else if (userTokens.length > 0) {
+        targetToken = userTokens[0];
+      }
+
+      if (!targetToken) {
+        return res.status(404).json({
+          success: false,
+          error: 'No registered push device found.',
+        });
+      }
+
+      // 5. Send FCM message exclusively to the verified user's device
+      const fcmPayload = {
+        message: {
+          token: targetToken,
+          notification: {
+            title: 'AquaSense X',
+            body: 'Push notifications are working.',
+          },
+          data: {
+            title: 'AquaSense X',
+            body: 'Push notifications are working.',
+            category: 'drinkReminders',
+          },
+          webpush: {
+            notification: {
+              title: 'AquaSense X',
+              body: 'Push notifications are working.',
+              icon: '/favicon.ico',
+              badge: '/favicon.ico',
+            },
+            fcm_options: {
+              link: '/',
+            },
+          },
+        },
+      };
+
+      const fcmResponse = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(fcmPayload),
+      });
+
+      const resJson = await fcmResponse.json();
+      if (fcmResponse.ok) {
+        console.log('[FCM Server] Successfully dispatched test push to verified user:', verifiedUid, resJson.name);
+        return res.json({ success: true, messageId: resJson.name });
+      } else {
+        console.warn('[FCM Server] Dispatch failed:', resJson);
+        return res.status(fcmResponse.status || 500).json({
+          success: false,
+          code: resJson.error?.status || 'FCM_DISPATCH_FAILED',
+          error: resJson.error?.message || 'Failed to dispatch FCM message',
+        });
+      }
+    } catch (error: any) {
+      console.error('[FCM Server] Internal error:', error);
+      res.status(500).json({ success: false, error: error?.message || 'Server error' });
+    }
   });
 
   // Vite middleware setup

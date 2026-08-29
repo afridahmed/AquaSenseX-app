@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { BottleProvider, useBottle } from './context/BottleContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -11,12 +11,29 @@ import { AICoachScreen } from './features/coach/AICoachScreen';
 import { ProfileScreen } from './features/profile/ProfileScreen';
 import { AppLayout } from './components/layout/AppLayout';
 import { NavTab } from './types';
+import { notificationService } from './services/notifications/notificationService';
 
 const MainAppContent: React.FC = () => {
   const { user, loading, isPairingModalOpen, setIsPairingModalOpen } = useAuth();
   const [splashFinished, setSplashFinished] = useState<boolean>(false);
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+
+  // Attach foreground FCM listener when user is active
+  useEffect(() => {
+    let unsubscribe: (() => void) | null = null;
+    notificationService.listenForegroundMessages().then((unsub) => {
+      if (unsub) {
+        unsubscribe = unsub;
+      }
+    });
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, []);
 
   // Step 1: Splash Screen
   if (!splashFinished) {

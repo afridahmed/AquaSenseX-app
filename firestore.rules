@@ -19,6 +19,11 @@ service cloud.firestore {
       match /hydrationLogs/{logId} {
         allow read, write: if isOwner(userId);
       }
+
+      // Subcollection for user's registered FCM device tokens
+      match /fcmTokens/{tokenId} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // 2. IoT Bottles:

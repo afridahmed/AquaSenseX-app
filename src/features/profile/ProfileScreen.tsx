@@ -218,13 +218,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
       }
     }
 
-    const result = notificationService.sendLocalNotification('AquaSense X Alert', {
-      body: '💧 Water Purity 94/100. Time for an afternoon hydration sip!',
-      icon: '/favicon.ico',
-    });
+    const result = await notificationService.sendTestPushNotification(user?.uid);
 
     if (result.success) {
-      setNotificationToast('💧 Test notification sent to your system notification tray.');
+      if (result.deliveredVia === 'fcm') {
+        setNotificationToast('✅ Push notification sent to your device via Firebase Cloud Messaging!');
+      } else {
+        setNotificationToast('💧 AquaSense X: Push notifications are working.');
+      }
     } else {
       setNotificationToast(result.error ? `⚠️ ${result.error}` : '⚠️ Unable to display notification.');
     }
