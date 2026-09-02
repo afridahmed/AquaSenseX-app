@@ -29,6 +29,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     hydrationPercent,
     remainingMl,
     aiTip,
+    isOnline,
+    isDeviceOnline,
     isAwaitingConnection,
     recordIntake,
     simulateRefill,
@@ -60,7 +62,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       <Header
         title="AquaSense X"
         subtitle={
-          bottle?.online
+          isDeviceOnline
             ? `Live monitoring • ${activeBottleId}`
             : isAwaitingConnection
             ? `Awaiting Connection... • ${activeBottleId || 'Bottle Paired'}`
@@ -73,7 +75,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         {/* 2. Water Quality Score (Primary dominant visual element) */}
         <WaterStatusCircle
           evaluation={qualityEval}
-          online={bottle?.online}
+          online={isDeviceOnline}
           isAwaitingConnection={isAwaitingConnection}
         />
 
@@ -82,7 +84,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           aiTip={aiTip}
           onRefreshTip={refreshAiTip}
           onNavigateToCoach={onNavigateToTab ? () => onNavigateToTab('coach') : undefined}
-          online={bottle?.online}
+          online={isDeviceOnline}
         />
 
         {/* 4. 2 × 2 Sensor Reading Grid (Cohesive hardware telemetry matrix) */}
@@ -93,14 +95,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </h2>
             <span
               className={`text-[10px] sm:text-[11px] font-mono px-2 py-0.5 rounded-full border ${
-                bottle?.online
+                isDeviceOnline
                   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                   : isAwaitingConnection
                   ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                   : 'bg-neutral-800 text-neutral-400 border-neutral-700/60'
               }`}
             >
-              {bottle?.online
+              {isDeviceOnline
                 ? 'Live Telemetry'
                 : isAwaitingConnection
                 ? 'Awaiting Connection...'
@@ -110,24 +112,25 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
           <SensorTelemetryGrid
             parameters={qualityEval.parameters}
-            online={bottle?.online}
+            online={isDeviceOnline}
           />
         </div>
 
         {/* 5. Test & Report Water (Directly after Sensor Reading Grid) */}
         <TestWaterActionCard
           onOpenTestModal={() => setIsTestModalOpen(true)}
-          online={bottle?.online}
+          online={isDeviceOnline}
         />
 
         {/* 6. Combined Bottle Water Level + Hydration Module */}
         <CombinedBottleHydrationCard
-          waterLevel={bottle?.waterLevel ?? 0}
+          waterLevel={bottle?.waterLevel ?? null}
           maxCapacity={bottle?.maxCapacity ?? 750}
           todayConsumed={todayConsumed}
           hydrationGoal={hydrationGoal}
           hydrationPercent={hydrationPercent}
           remainingMl={remainingMl}
+          online={isDeviceOnline}
           onRecordIntake={recordIntake}
           onOpenCustomDrink={() => setIsCustomDrinkOpen(true)}
           onRefill={simulateRefill}

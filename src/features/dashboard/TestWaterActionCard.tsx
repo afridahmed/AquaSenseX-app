@@ -72,7 +72,7 @@ export const TestWaterActionCard: React.FC<TestWaterActionCardProps> = ({
             <p className="text-xs text-neutral-300 leading-snug">
               {online
                 ? 'Capture live sensor telemetry to verify and report an unmapped fountain or tap.'
-                : 'Device offline — connect bottle to scan new water source.'}
+                : 'Live bottle connection required to generate reports.'}
             </p>
           </div>
         </div>
@@ -84,7 +84,7 @@ export const TestWaterActionCard: React.FC<TestWaterActionCardProps> = ({
             type="button"
             onClick={handleClick}
             disabled={!online}
-            title={!online ? 'Device offline — connect bottle to scan new water source' : undefined}
+            title={!online ? 'Live bottle connection required to generate reports' : undefined}
             className={`w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-semibold transition-all touch-target sm:min-h-0 select-none ${
               online
                 ? 'bg-[#00D1FF] hover:bg-[#00B4D8] active:bg-[#0096B4] text-[#090B0E] shadow-md shadow-[#00D1FF]/20 active:scale-[0.98] cursor-pointer'
@@ -102,7 +102,7 @@ export const TestWaterActionCard: React.FC<TestWaterActionCardProps> = ({
           {showTooltip && !online && (
             <div className="absolute bottom-full right-0 mb-2 w-64 p-2 bg-neutral-900 border border-amber-500/40 text-amber-300 rounded-xl text-[11px] shadow-2xl z-20 flex items-start gap-1.5 animate-fadeIn">
               <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-              <span>Device offline — connect bottle to scan new water source</span>
+              <span>Live bottle connection required to generate reports</span>
             </div>
           )}
         </div>

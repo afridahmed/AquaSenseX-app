@@ -38,13 +38,13 @@ export interface BottleData {
   tds: number | null; // ppm
   turbidity: number | null; // NTU
   ph: number | null; // 0 - 14
-  waterLevel: number; // in ml, e.g. 0 - 750 ml
+  waterLevel: number | null; // in ml, e.g. 0 - 750 ml or null when offline
   maxCapacity?: number; // e.g. 750 ml
   lastUpdated: string;
   lastSyncTimestamp?: string;
   isDevelopment?: boolean;
   qualityScore?: number | null;
-  qualityCategory?: WaterQualityCategory | 'Offline';
+  qualityCategory?: WaterQualityCategory | 'Offline' | 'Awaiting Connection';
   isStale?: boolean;
 }
 

@@ -64,7 +64,7 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
   initialMode = 'explore',
 }) => {
   const { user } = useAuth();
-  const { bottle } = useBottle();
+  const { bottle, isDeviceOnline } = useBottle();
 
   // Mode state: Explore vs Report
   const [mode, setMode] = useState<CommunityMode>(initialMode);
@@ -546,16 +546,16 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
             id="mode-switch-report-btn"
             type="button"
             onClick={() => setMode('report')}
-            title={!bottle?.online ? 'Connect your AquaSense X device to submit water quality reports' : undefined}
+            title={!isDeviceOnline ? 'Connect your AquaSense X device to submit water quality reports' : undefined}
             className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               mode === 'report'
                 ? 'bg-[#181E26] text-[#00D1FF] border border-[#00D1FF]/40 shadow-sm shadow-[#00D1FF]/15'
                 : 'text-neutral-400 hover:text-white border border-transparent'
             }`}
           >
-            {bottle?.online ? <FlaskConical className="w-4 h-4" /> : <WifiOff className="w-4 h-4 text-neutral-400" />}
+            {isDeviceOnline ? <FlaskConical className="w-4 h-4" /> : <WifiOff className="w-4 h-4 text-neutral-400" />}
             <span>Report</span>
-            {!bottle?.online && (
+            {!isDeviceOnline && (
               <span className="hidden xs:inline-block text-[9px] px-1.5 py-0.2 rounded-full bg-neutral-800 text-neutral-400 font-normal border border-neutral-700">
                 Offline
               </span>
@@ -565,7 +565,7 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
       </div>
 
       {/* Offline Restriction Banner for Report Mode */}
-      {mode === 'report' && !bottle?.online && (
+      {mode === 'report' && !isDeviceOnline && (
         <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-300 shadow-xl">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
@@ -592,7 +592,7 @@ export const CommunityMapScreen: React.FC<CommunityMapScreenProps> = ({
       {mode === 'report' ? (
         /* REPORT MODE: Strict physical location acquisition & report submission */
         <CommunityReportMode
-          online={bottle?.online}
+          online={isDeviceOnline}
           onSuccessPublish={(newReport) => {
             setReports((prev) => [newReport, ...prev.filter((r) => r.id !== newReport.id)]);
             setSelectedReport(newReport);

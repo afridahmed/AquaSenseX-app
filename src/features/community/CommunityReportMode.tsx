@@ -185,9 +185,9 @@ export const CommunityReportMode: React.FC<CommunityReportModeProps> = ({
   onCancel,
   online = true,
 }) => {
-  const { bottle, qualityEval } = useBottle();
+  const { bottle, qualityEval, isDeviceOnline: contextIsDeviceOnline } = useBottle();
   const { user } = useAuth();
-  const isDeviceOnline = online && (bottle?.online ?? false);
+  const isDeviceOnline = online && (contextIsDeviceOnline ?? (bottle?.online ?? false));
 
   const [sourceName, setSourceName] = useState<string>('');
   const [sourceType, setSourceType] = useState<CommunityReport['sourceType']>('fountain');

@@ -24,6 +24,8 @@ interface BottleContextType {
   remainingMl: number;
   aiTip: string;
   isStale: boolean;
+  isOnline: boolean;
+  isDeviceOnline: boolean;
   isAwaitingConnection: boolean;
   isSimulatorOpen: boolean;
   setIsSimulatorOpen: (open: boolean) => void;
@@ -159,34 +161,53 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const remainingMl = Math.max(0, hydrationGoal - todayConsumed);
 
   // Determine physical handshake status & live online status
-  const hasSyncedOnce = Boolean(bottle?.lastSyncTimestamp);
-  const isOnline = Boolean(bottle?.online && !isHardwareTimedOut && hasSyncedOnce);
+  let lastSyncTimeMs: number | null = null;
+  const syncTimeRaw = bottle?.lastSyncTimestamp || bottle?.lastUpdated;
+  if (syncTimeRaw) {
+    if (typeof syncTimeRaw === 'number') {
+      lastSyncTimeMs = syncTimeRaw;
+    } else if (typeof syncTimeRaw === 'object' && syncTimeRaw && 'toMillis' in syncTimeRaw) {
+      lastSyncTimeMs = (syncTimeRaw as any).toMillis();
+    } else {
+      lastSyncTimeMs = new Date(syncTimeRaw).getTime();
+    }
+  }
+
+  const hasSyncedOnce = Boolean(lastSyncTimeMs && !isNaN(lastSyncTimeMs) && lastSyncTimeMs > 0);
+  const isWithinWatchdog = Boolean(hasSyncedOnce && (Date.now() - (lastSyncTimeMs as number) < OFFLINE_WATCHDOG_TIMEOUT_MS));
+  const isDeviceOnline = Boolean(bottle?.online === true && isWithinWatchdog && !isHardwareTimedOut);
+  const isOnline = isDeviceOnline;
   const isAwaitingConnection = Boolean(bottleId && (!bottle || !hasSyncedOnce));
+
+  // Compute live quality evaluation (sets to null/offline state when offline)
+  const qualityEval: WaterQualityEvaluation = evaluateWaterQuality({
+    isOffline: !isDeviceOnline,
+    ph: isDeviceOnline ? (bottle?.ph ?? null) : null,
+    tds: isDeviceOnline ? (bottle?.tds ?? null) : null,
+    turbidity: isDeviceOnline ? (bottle?.turbidity ?? null) : null,
+    temperature: isDeviceOnline ? (bottle?.temperature ?? null) : null,
+  });
 
   const effectiveBottle: BottleData | null = bottle
     ? {
         ...bottle,
-        online: isOnline,
-        ph: isOnline ? (bottle.ph ?? null) : null,
-        tds: isOnline ? (bottle.tds ?? null) : null,
-        turbidity: isOnline ? (bottle.turbidity ?? null) : null,
-        temperature: isOnline ? (bottle.temperature ?? null) : null,
-        qualityScore: isOnline ? (bottle.qualityScore ?? null) : null,
-        qualityCategory: isOnline ? (bottle.qualityCategory ?? 'Good') : 'Offline',
-        isStale: !isOnline,
+        online: isDeviceOnline,
+        ph: isDeviceOnline ? (bottle.ph ?? null) : null,
+        tds: isDeviceOnline ? (bottle.tds ?? null) : null,
+        turbidity: isDeviceOnline ? (bottle.turbidity ?? null) : null,
+        temperature: isDeviceOnline ? (bottle.temperature ?? null) : null,
+        waterLevel: isDeviceOnline ? (bottle.waterLevel ?? null) : null,
+        qualityScore: isDeviceOnline ? (bottle.qualityScore ?? null) : null,
+        qualityCategory: isDeviceOnline
+          ? (bottle.qualityCategory && bottle.qualityCategory !== 'Offline' && bottle.qualityCategory !== 'Awaiting Connection'
+              ? bottle.qualityCategory
+              : qualityEval.category)
+          : (isAwaitingConnection ? 'Awaiting Connection' : 'Offline'),
+        isStale: !isDeviceOnline,
       }
     : null;
 
-  // Compute live quality evaluation (sets to null/offline state when offline)
-  const qualityEval: WaterQualityEvaluation = evaluateWaterQuality({
-    isOffline: !isOnline,
-    ph: isOnline ? (effectiveBottle?.ph ?? null) : null,
-    tds: isOnline ? (effectiveBottle?.tds ?? null) : null,
-    turbidity: isOnline ? (effectiveBottle?.turbidity ?? null) : null,
-    temperature: isOnline ? (effectiveBottle?.temperature ?? null) : null,
-  });
-
-  const isStale = !isOnline;
+  const isStale = !isDeviceOnline;
 
   // Fetch AI hydration tip
   const refreshAiTip = useCallback(async () => {
@@ -384,6 +405,8 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         remainingMl,
         aiTip,
         isStale,
+        isOnline,
+        isDeviceOnline,
         isAwaitingConnection,
         isSimulatorOpen,
         setIsSimulatorOpen,

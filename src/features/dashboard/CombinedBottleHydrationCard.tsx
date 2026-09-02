@@ -3,12 +3,13 @@ import { motion } from 'motion/react';
 import { Droplets, Plus, RefreshCw, Sparkles, CheckCircle2 } from 'lucide-react';
 
 interface CombinedBottleHydrationCardProps {
-  waterLevel: number;
+  waterLevel: number | null;
   maxCapacity: number;
   todayConsumed: number;
   hydrationGoal: number;
   hydrationPercent: number;
   remainingMl: number;
+  online?: boolean;
   onRecordIntake: (amountMl: number, source?: any) => Promise<void>;
   onOpenCustomDrink: () => void;
   onRefill?: () => void;
@@ -21,13 +22,18 @@ export const CombinedBottleHydrationCard: React.FC<CombinedBottleHydrationCardPr
   hydrationGoal,
   hydrationPercent,
   remainingMl,
+  online = true,
   onRecordIntake,
   onOpenCustomDrink,
   onRefill,
 }) => {
+  const isLevelOffline = !online || waterLevel === null || waterLevel === undefined;
+
   // Bottle Level Math
-  const bottlePercent = Math.min(100, Math.max(0, Math.round((waterLevel / maxCapacity) * 100)));
-  const bottleLiters = (waterLevel / 1000).toFixed(2);
+  const bottlePercent = isLevelOffline
+    ? null
+    : Math.min(100, Math.max(0, Math.round((waterLevel / maxCapacity) * 100)));
+  const bottleLiters = isLevelOffline ? null : (waterLevel / 1000).toFixed(2);
   const maxCapacityLiters = (maxCapacity / 1000).toFixed(2);
 
   // Hydration Math
@@ -67,7 +73,7 @@ export const CombinedBottleHydrationCard: React.FC<CombinedBottleHydrationCardPr
               <motion.div
                 className="w-full relative overflow-hidden rounded-b-[14px]"
                 initial={{ height: 0 }}
-                animate={{ height: `${bottlePercent}%` }}
+                animate={{ height: isLevelOffline ? '0%' : `${bottlePercent}%` }}
                 transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
               >
                 {/* Animated Liquid Wave / Surface Meniscus */}
@@ -94,21 +100,33 @@ export const CombinedBottleHydrationCard: React.FC<CombinedBottleHydrationCardPr
                 <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-400">
                   Smart Bottle
                 </span>
-                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-[#00D1FF]/10 text-[#00D1FF] border border-[#00D1FF]/20">
-                  {bottlePercent}%
+                <span
+                  className={`text-[9px] font-mono px-1.5 py-0.2 rounded border ${
+                    isLevelOffline
+                      ? 'bg-neutral-800 text-neutral-400 border-neutral-700/60'
+                      : 'bg-[#00D1FF]/10 text-[#00D1FF] border-[#00D1FF]/20'
+                  }`}
+                >
+                  {isLevelOffline ? '--' : `${bottlePercent}%`}
                 </span>
               </div>
 
               <div className="flex items-baseline gap-1">
-                <span className="text-xl xs:text-2xl sm:text-3xl font-light text-white tracking-tight">
-                  {bottleLiters}
+                <span
+                  className={`text-xl xs:text-2xl sm:text-3xl font-light tracking-tight ${
+                    isLevelOffline ? 'text-neutral-500' : 'text-white'
+                  }`}
+                >
+                  {isLevelOffline ? '--' : bottleLiters}
                 </span>
-                <span className="text-xs text-neutral-400 font-normal">
-                  / {maxCapacityLiters} L
-                </span>
+                {!isLevelOffline && (
+                  <span className="text-xs text-neutral-400 font-normal">
+                    / {maxCapacityLiters} L
+                  </span>
+                )}
               </div>
               <span className="text-[11px] text-neutral-500 font-mono block mt-0.5">
-                {waterLevel} ml in flask
+                {isLevelOffline ? '-- ml in flask (Offline)' : `${waterLevel} ml in flask`}
               </span>
             </div>
 
