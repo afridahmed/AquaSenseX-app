@@ -11,6 +11,7 @@ import {
   ChevronDown,
   BatteryCharging,
   X,
+  Clock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -21,7 +22,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ title = 'AquaSense X', mobileTitle, subtitle }) => {
-  const { bottle, simulateRefill } = useBottle();
+  const { bottle, isAwaitingConnection } = useBottle();
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [isTelemetryOpen, setIsTelemetryOpen] = useState<boolean>(false);
@@ -42,8 +43,18 @@ export const Header: React.FC<HeaderProps> = ({ title = 'AquaSense X', mobileTit
     };
   }, [isTelemetryOpen]);
 
-  const batteryPct = bottle?.battery ?? 92;
-  const isOnline = bottle?.online ?? true;
+  const activeBottleId = bottle?.bottleId || user?.bottleId || user?.assignedBottleId;
+  const batteryPct = bottle?.battery ?? 0;
+  const isOnline = Boolean(bottle?.online);
+
+  // Computed default subtitle if not explicitly provided
+  const resolvedSubtitle =
+    subtitle ||
+    (isOnline
+      ? `Live monitoring • ${activeBottleId || 'Connected'}`
+      : isAwaitingConnection
+      ? `Awaiting Connection... • ${activeBottleId || 'Paired'}`
+      : `Device Offline • ${activeBottleId || 'Paired'}`);
 
   return (
     <header className="sticky top-0 z-30 bg-[#090B0E]/85 backdrop-blur-xl border-b border-white/5 px-3.5 xs:px-4 sm:px-6 lg:px-8 py-2.5 sm:py-3 flex items-center justify-between transition-colors safe-area-pt">
@@ -65,9 +76,9 @@ export const Header: React.FC<HeaderProps> = ({ title = 'AquaSense X', mobileTit
               )}
             </h1>
           </div>
-          {subtitle && (
+          {resolvedSubtitle && (
             <p className="hidden sm:block text-xs text-neutral-400 truncate max-w-md">
-              {subtitle}
+              {resolvedSubtitle}
             </p>
           )}
         </div>
@@ -76,7 +87,7 @@ export const Header: React.FC<HeaderProps> = ({ title = 'AquaSense X', mobileTit
       {/* Right Controls: Apple/Tesla Telemetry Capsule & Theme Toggle */}
       <div className="flex items-center gap-2 sm:gap-2.5 shrink-0" ref={popoverRef}>
         {/* Apple/Tesla-Style Live Status & Battery Capsule */}
-        {bottle && (
+        {activeBottleId && (
           <div className="relative">
             <button
               onClick={() => setIsTelemetryOpen(!isTelemetryOpen)}
@@ -88,41 +99,56 @@ export const Header: React.FC<HeaderProps> = ({ title = 'AquaSense X', mobileTit
               title="AquaSense X Device Telemetry & Power Status"
               aria-label="Bottle Status & Battery Level"
             >
-              {/* Online / Offline Status Indicator */}
+              {/* Online / Awaiting / Offline Status Indicator */}
               <div className="flex items-center gap-1.5">
                 <span className="relative flex h-2 w-2">
                   {isOnline && (
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                   )}
+                  {isAwaitingConnection && (
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                  )}
                   <span
                     className={`relative inline-flex rounded-full h-2 w-2 ${
-                      isOnline ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-neutral-500'
+                      isOnline
+                        ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
+                        : isAwaitingConnection
+                        ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]'
+                        : 'bg-neutral-500'
                     }`}
                   />
                 </span>
                 <span
                   className={`text-[11px] xs:text-xs font-medium tracking-tight ${
-                    isOnline ? 'text-emerald-400' : 'text-neutral-400'
+                    isOnline
+                      ? 'text-emerald-400'
+                      : isAwaitingConnection
+                      ? 'text-amber-400'
+                      : 'text-neutral-400'
                   }`}
                 >
-                  {isOnline ? 'Online' : 'Offline'}
+                  {isOnline ? 'Online' : isAwaitingConnection ? 'Awaiting' : 'Offline'}
                 </span>
               </div>
 
               {/* Minimal Divider */}
               <span className="w-px h-3 bg-white/15 shrink-0" />
 
-              {/* Precision Apple-Style Battery Pill with Fill Bar */}
+              {/* Precision Battery Indicator */}
               <div className="flex items-center gap-1.5 text-[11px] xs:text-xs font-medium text-neutral-200">
-                {/* Physical Battery Cell Graphic */}
                 <div className="w-4 h-2.5 rounded-[3px] border border-neutral-400/90 p-[1px] flex items-center relative shrink-0">
                   <div
                     className={`h-full rounded-[1.5px] transition-all duration-500 ${
-                      batteryPct <= 15 ? 'bg-rose-500' : batteryPct <= 30 ? 'bg-amber-400' : 'bg-emerald-400'
+                      !isOnline && !isAwaitingConnection
+                        ? 'bg-neutral-600'
+                        : batteryPct <= 15
+                        ? 'bg-rose-500'
+                        : batteryPct <= 30
+                        ? 'bg-amber-400'
+                        : 'bg-emerald-400'
                     }`}
                     style={{ width: `${Math.max(12, Math.min(100, batteryPct))}%` }}
                   />
-                  {/* Battery Terminal Tip */}
                   <div className="absolute -right-[2.5px] top-[2.5px] w-[1.5px] h-[3px] bg-neutral-400/90 rounded-r-[1px]" />
                 </div>
                 <span className="tabular-nums font-mono">{batteryPct}%</span>
@@ -131,7 +157,7 @@ export const Header: React.FC<HeaderProps> = ({ title = 'AquaSense X', mobileTit
               {/* Short Device Tag on md+ screens */}
               <span className="hidden lg:inline w-px h-3 bg-white/15 shrink-0" />
               <span className="hidden lg:inline text-[11px] font-mono text-neutral-400">
-                {bottle.bottleId.split('-').slice(0, 2).join('-')}
+                {activeBottleId.split('-').slice(0, 2).join('-')}
               </span>
 
               <ChevronDown
@@ -141,7 +167,7 @@ export const Header: React.FC<HeaderProps> = ({ title = 'AquaSense X', mobileTit
               />
             </button>
 
-            {/* Apple / Tesla Floating Telemetry Drawer / Popover */}
+            {/* Floating Telemetry Drawer / Popover */}
             <AnimatePresence>
               {isTelemetryOpen && (
                 <motion.div
@@ -161,7 +187,7 @@ export const Header: React.FC<HeaderProps> = ({ title = 'AquaSense X', mobileTit
                         <h4 className="text-xs font-semibold text-white tracking-tight">
                           AquaSense X Smart Bottle
                         </h4>
-                        <p className="text-[10px] font-mono text-neutral-400">{bottle.bottleId}</p>
+                        <p className="text-[10px] font-mono text-neutral-400">{activeBottleId}</p>
                       </div>
                     </div>
                     <button
@@ -180,6 +206,8 @@ export const Header: React.FC<HeaderProps> = ({ title = 'AquaSense X', mobileTit
                         <span>Status</span>
                         {isOnline ? (
                           <Wifi className="w-3 h-3 text-emerald-400" />
+                        ) : isAwaitingConnection ? (
+                          <Clock className="w-3 h-3 text-amber-400" />
                         ) : (
                           <WifiOff className="w-3 h-3 text-neutral-500" />
                         )}
@@ -187,14 +215,20 @@ export const Header: React.FC<HeaderProps> = ({ title = 'AquaSense X', mobileTit
                       <div className="flex items-center gap-1.5">
                         <span
                           className={`w-2 h-2 rounded-full ${
-                            isOnline ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-neutral-500'
+                            isOnline
+                              ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]'
+                              : isAwaitingConnection
+                              ? 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.8)]'
+                              : 'bg-neutral-500'
                           }`}
                         />
                         <span className="text-xs font-semibold text-white">
-                          {isOnline ? 'Active Sync' : 'Offline'}
+                          {isOnline ? 'Active Sync' : isAwaitingConnection ? 'Awaiting Data' : 'Offline'}
                         </span>
                       </div>
-                      <p className="text-[9px] text-neutral-400">BLE 5.2 / WiFi Telemetry</p>
+                      <p className="text-[9px] text-neutral-400">
+                        {isOnline ? 'ESP32 / WiFi Live Stream' : isAwaitingConnection ? 'Power on bottle to sync' : 'Standby / 15s Watchdog'}
+                      </p>
                     </div>
 
                     {/* Battery Level */}
@@ -205,17 +239,19 @@ export const Header: React.FC<HeaderProps> = ({ title = 'AquaSense X', mobileTit
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-semibold text-white font-mono">{batteryPct}%</span>
-                        <span className="text-[10px] text-emerald-400 font-medium">Good</span>
+                        <span className={`text-[10px] font-medium ${isOnline ? 'text-emerald-400' : 'text-neutral-400'}`}>
+                          {isOnline ? 'Active' : 'Standby'}
+                        </span>
                       </div>
-                      <p className="text-[9px] text-neutral-400">~4.5 days operational</p>
+                      <p className="text-[9px] text-neutral-400">Integrated Li-ion Cell</p>
                     </div>
                   </div>
 
                   {/* Quick Bottom Action */}
                   <div className="pt-0.5 flex items-center justify-between text-[10px] text-neutral-400">
                     <span className="flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      Continuous optical scan
+                      <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-500'}`} />
+                      {isOnline ? 'Continuous optical scan' : 'Awaiting hardware data'}
                     </span>
                     <span className="text-neutral-500">Cap v2.4</span>
                   </div>
@@ -237,5 +273,3 @@ export const Header: React.FC<HeaderProps> = ({ title = 'AquaSense X', mobileTit
     </header>
   );
 };
-
-

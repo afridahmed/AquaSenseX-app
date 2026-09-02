@@ -6,7 +6,6 @@ import { evaluateWaterQuality } from '../services/waterQuality/qualityEvaluator'
 import { db } from '../services/firebase/firebaseConfig';
 import {
   collection,
-  doc,
   addDoc,
   onSnapshot,
   query,
@@ -25,6 +24,7 @@ interface BottleContextType {
   remainingMl: number;
   aiTip: string;
   isStale: boolean;
+  isAwaitingConnection: boolean;
   isSimulatorOpen: boolean;
   setIsSimulatorOpen: (open: boolean) => void;
   recordIntake: (amountMl: number, source?: HydrationLog['source'], note?: string) => Promise<void>;
@@ -40,32 +40,48 @@ interface BottleContextType {
 
 const BottleContext = createContext<BottleContextType | undefined>(undefined);
 
+// 15-second hardware offline watchdog timeout
+const OFFLINE_WATCHDOG_TIMEOUT_MS = 15000;
+
 export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { user, updateUserProfile } = useAuth();
   const [bottle, setBottle] = useState<BottleData | null>(null);
   const [hydrationLogs, setHydrationLogs] = useState<HydrationLog[]>([]);
-  const [aiTip, setAiTip] = useState<string>('Stay hydrated! Hydration optimizes energy, cognition, and cellular repair.');
+  const [aiTip, setAiTip] = useState<string>('AquaSense X is monitoring water safety and hydration.');
   const [isSimulatorOpen, setIsSimulatorOpen] = useState<boolean>(false);
-
-  const bottleId = user?.bottleId;
-  const hydrationGoal = user?.hydrationGoal || 2500;
   const [isHardwareTimedOut, setIsHardwareTimedOut] = useState<boolean>(false);
 
-  // 15-second hardware offline watchdog
-  const OFFLINE_WATCHDOG_TIMEOUT_MS = 15000;
+  const bottleId = user?.bottleId || user?.assignedBottleId;
+  const hydrationGoal = user?.hydrationGoal || 2500;
 
+  // 15-second physical ESP32 watchdog timer
   useEffect(() => {
     const checkWatchdog = () => {
       if (!bottle) {
-        setIsHardwareTimedOut(false);
-        return;
-      }
-      const syncTimeStr = bottle.lastSyncTimestamp || bottle.lastUpdated;
-      if (!syncTimeStr) {
         setIsHardwareTimedOut(true);
         return;
       }
-      const lastSyncMs = new Date(syncTimeStr).getTime();
+
+      const syncTimeRaw = bottle.lastSyncTimestamp || bottle.lastUpdated;
+      if (!syncTimeRaw) {
+        setIsHardwareTimedOut(true);
+        return;
+      }
+
+      let lastSyncMs: number;
+      if (typeof syncTimeRaw === 'number') {
+        lastSyncMs = syncTimeRaw;
+      } else if (typeof syncTimeRaw === 'object' && syncTimeRaw && 'toMillis' in syncTimeRaw) {
+        lastSyncMs = (syncTimeRaw as any).toMillis();
+      } else {
+        lastSyncMs = new Date(syncTimeRaw).getTime();
+      }
+
+      if (isNaN(lastSyncMs) || lastSyncMs <= 0) {
+        setIsHardwareTimedOut(true);
+        return;
+      }
+
       const elapsed = Date.now() - lastSyncMs;
       const timedOut = elapsed > OFFLINE_WATCHDOG_TIMEOUT_MS;
       setIsHardwareTimedOut(timedOut);
@@ -142,8 +158,11 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const hydrationPercent = Math.min(100, Math.round((todayConsumed / hydrationGoal) * 100));
   const remainingMl = Math.max(0, hydrationGoal - todayConsumed);
 
-  // Determine effective bottle state with 15-second offline watchdog
-  const isOnline = Boolean(bottle?.online && !isHardwareTimedOut);
+  // Determine physical handshake status & live online status
+  const hasSyncedOnce = Boolean(bottle?.lastSyncTimestamp);
+  const isOnline = Boolean(bottle?.online && !isHardwareTimedOut && hasSyncedOnce);
+  const isAwaitingConnection = Boolean(bottleId && (!bottle || !hasSyncedOnce));
+
   const effectiveBottle: BottleData | null = bottle
     ? {
         ...bottle,
@@ -167,13 +186,16 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     temperature: isOnline ? (effectiveBottle?.temperature ?? null) : null,
   });
 
-  // Check if data is stale (> 15s without update or bottle offline)
   const isStale = !isOnline;
 
   // Fetch AI hydration tip
   const refreshAiTip = useCallback(async () => {
     if (!isOnline) {
-      setAiTip('AquaSense X is currently offline. Reconnect your bottle or transmit telemetry to receive live AI purity & hydration insights.');
+      if (isAwaitingConnection) {
+        setAiTip('AquaSense X is awaiting initial connection from your physical smart bottle. Power on the bottle to begin streaming live sensor data.');
+      } else {
+        setAiTip('AquaSense X is currently offline. Reconnect your bottle or transmit telemetry to receive live AI purity & hydration insights.');
+      }
       return;
     }
 
@@ -201,16 +223,16 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const pct = Math.round((todayConsumed / hydrationGoal) * 100);
       setAiTip(`You're at ${pct}% of your daily target. Drink steadily throughout the day.`);
     }
-  }, [isOnline, hydrationGoal, todayConsumed, bottle, qualityEval.score]);
+  }, [isOnline, isAwaitingConnection, hydrationGoal, todayConsumed, bottle, qualityEval.score]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       refreshAiTip();
     }, 1200);
     return () => clearTimeout(timer);
-  }, [todayConsumed, bottle?.bottleId]);
+  }, [todayConsumed, bottle?.bottleId, isOnline, isAwaitingConnection]);
 
-  // Record an intake event directly in Firestore (both users/{uid}/hydrationLogs and hydrationLogs)
+  // Record an intake event directly in Firestore
   const recordIntake = async (
     amountMl: number,
     source: HydrationLog['source'] = 'quick_preset',
@@ -227,7 +249,7 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
 
     try {
-      // 1. Subcollection
+      // 1. User subcollection
       const userLogsCol = collection(db, 'users', user.uid, 'hydrationLogs');
       await addDoc(userLogsCol, {
         ...newLogItem,
@@ -281,7 +303,7 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
-  // IoT Simulator controls (writes directly to Firestore)
+  // IoT Simulator controls
   const simulateDrink = (amountMl: number) => {
     if (!bottle) return;
     recordIntake(amountMl, 'bottle_auto', 'Detected from AquaSense X fluid sensor');
@@ -295,6 +317,8 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       tds: 145,
       turbidity: 0.2,
       ph: 7.4,
+      online: true,
+      battery: 92,
     });
   };
 
@@ -307,6 +331,7 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           tds: 340,
           turbidity: 1.8,
           temperature: 22.0,
+          online: true,
         });
         break;
       case 'turbid':
@@ -315,6 +340,7 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           tds: 480,
           turbidity: 4.8,
           temperature: 23.5,
+          online: true,
         });
         break;
       case 'mineral_overload':
@@ -323,6 +349,7 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           tds: 890,
           turbidity: 2.2,
           temperature: 21.0,
+          online: true,
         });
         break;
       case 'optimal':
@@ -332,6 +359,7 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           turbidity: 0.3,
           temperature: 18.0,
           waterLevel: 680,
+          online: true,
         });
         break;
     }
@@ -356,6 +384,7 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         remainingMl,
         aiTip,
         isStale,
+        isAwaitingConnection,
         isSimulatorOpen,
         setIsSimulatorOpen,
         recordIntake,

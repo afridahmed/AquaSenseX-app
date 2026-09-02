@@ -1,14 +1,19 @@
 import React from 'react';
 import { WaterQualityEvaluation } from '../../types';
 import { motion } from 'motion/react';
-import { ShieldCheck, AlertCircle, AlertTriangle, Sparkles, WifiOff } from 'lucide-react';
+import { ShieldCheck, AlertCircle, AlertTriangle, Sparkles, WifiOff, Clock } from 'lucide-react';
 
 interface WaterStatusCircleProps {
   evaluation: WaterQualityEvaluation;
   online?: boolean;
+  isAwaitingConnection?: boolean;
 }
 
-export const WaterStatusCircle: React.FC<WaterStatusCircleProps> = ({ evaluation, online = true }) => {
+export const WaterStatusCircle: React.FC<WaterStatusCircleProps> = ({
+  evaluation,
+  online = true,
+  isAwaitingConnection = false,
+}) => {
   const { score, headline, category, badgeBg, badgeText, colorClass } = evaluation;
 
   const isOffline = !online || score === null || score === undefined;
@@ -25,6 +30,9 @@ export const WaterStatusCircle: React.FC<WaterStatusCircleProps> = ({ evaluation
 
   // Category Icon
   const renderCategoryIcon = () => {
+    if (isAwaitingConnection) {
+      return <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />;
+    }
     if (isOffline) {
       return <WifiOff className="w-3.5 h-3.5 text-neutral-400 shrink-0" />;
     }
@@ -56,13 +64,15 @@ export const WaterStatusCircle: React.FC<WaterStatusCircleProps> = ({ evaluation
       <div className="flex items-center gap-2 mb-2 sm:mb-3 z-10">
         <span
           className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold uppercase tracking-wider border ${
-            isOffline
+            isAwaitingConnection
+              ? 'bg-amber-500/10 border-amber-500/20 text-amber-300'
+              : isOffline
               ? 'bg-neutral-800/80 border-neutral-700/60 text-neutral-300'
               : `${badgeBg} ${badgeText}`
           }`}
         >
           {renderCategoryIcon()}
-          <span>{isOffline ? 'DEVICE OFFLINE' : headline}</span>
+          <span>{isAwaitingConnection ? 'AWAITING CONNECTION...' : isOffline ? 'DEVICE OFFLINE' : headline}</span>
         </span>
       </div>
 
@@ -103,7 +113,7 @@ export const WaterStatusCircle: React.FC<WaterStatusCircleProps> = ({ evaluation
           </span>
 
           <motion.div
-            key={isOffline ? 'offline' : score}
+            key={isAwaitingConnection ? 'awaiting' : isOffline ? 'offline' : score}
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.4 }}
@@ -125,17 +135,19 @@ export const WaterStatusCircle: React.FC<WaterStatusCircleProps> = ({ evaluation
 
           <span
             className={`text-xs sm:text-sm font-semibold tracking-wide mt-0.5 sm:mt-1 ${
-              isOffline ? 'text-neutral-400' : colorClass
+              isAwaitingConnection ? 'text-amber-400' : isOffline ? 'text-neutral-400' : colorClass
             }`}
           >
-            {isOffline ? 'Offline' : category}
+            {isAwaitingConnection ? 'Awaiting Data' : isOffline ? 'Offline' : category}
           </span>
         </div>
       </div>
 
       {/* Description */}
       <p className="text-[11px] sm:text-xs text-center text-neutral-400 max-w-xs sm:max-w-sm mt-1 leading-relaxed z-10 px-1">
-        {isOffline
+        {isAwaitingConnection
+          ? 'AquaSense X is waiting for initial telemetry from your physical bottle. Power on your bottle to begin live purity tracking.'
+          : isOffline
           ? 'AquaSense X is currently offline. Connect your bottle or stream telemetry to view active purity screening.'
           : evaluation.description}
       </p>
@@ -144,7 +156,9 @@ export const WaterStatusCircle: React.FC<WaterStatusCircleProps> = ({ evaluation
       <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-white/5 w-full flex items-center justify-center gap-1.5 text-[10px] sm:text-[11px] text-neutral-500">
         <Sparkles className={`w-3.5 h-3.5 shrink-0 ${isOffline ? 'text-neutral-500' : 'text-[#00D1FF]/70'}`} />
         <span className="truncate">
-          {isOffline
+          {isAwaitingConnection
+            ? 'Standby mode • Awaiting physical ESP32 handshake'
+            : isOffline
             ? 'Standby mode • Waiting for hardware connection'
             : 'Multi-spectral optical & electrochemical screening'}
         </span>
@@ -152,4 +166,3 @@ export const WaterStatusCircle: React.FC<WaterStatusCircleProps> = ({ evaluation
     </div>
   );
 };
-

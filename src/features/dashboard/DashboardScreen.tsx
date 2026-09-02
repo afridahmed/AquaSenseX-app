@@ -29,6 +29,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     hydrationPercent,
     remainingMl,
     aiTip,
+    isAwaitingConnection,
     recordIntake,
     simulateRefill,
     refreshAiTip,
@@ -51,18 +52,30 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     }
   };
 
+  const activeBottleId = bottle?.bottleId || user?.bottleId || user?.assignedBottleId;
+
   return (
     <div className="min-h-full bg-[#090B0E] text-[#F8FAFC] flex flex-col transition-colors duration-200">
       {/* 1. Header / bottle status */}
       <Header
         title="AquaSense X"
-        subtitle={`Live monitoring • ${bottle?.bottleId || 'Bottle Connected'}`}
+        subtitle={
+          bottle?.online
+            ? `Live monitoring • ${activeBottleId}`
+            : isAwaitingConnection
+            ? `Awaiting Connection... • ${activeBottleId || 'Bottle Paired'}`
+            : `Device Offline • ${activeBottleId || 'Bottle Paired'}`
+        }
       />
 
       <div className="p-3.5 xs:p-4 sm:p-5 lg:p-6 max-w-4xl mx-auto w-full space-y-3.5 sm:space-y-4 lg:space-y-5">
         
         {/* 2. Water Quality Score (Primary dominant visual element) */}
-        <WaterStatusCircle evaluation={qualityEval} online={bottle?.online} />
+        <WaterStatusCircle
+          evaluation={qualityEval}
+          online={bottle?.online}
+          isAwaitingConnection={isAwaitingConnection}
+        />
 
         {/* 3. AI Sensor Insight (Directly below Water Quality Score) */}
         <AISensorInsightBanner
@@ -82,10 +95,16 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
               className={`text-[10px] sm:text-[11px] font-mono px-2 py-0.5 rounded-full border ${
                 bottle?.online
                   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  : isAwaitingConnection
+                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                   : 'bg-neutral-800 text-neutral-400 border-neutral-700/60'
               }`}
             >
-              {bottle?.online ? 'Live Telemetry' : 'Device Offline'}
+              {bottle?.online
+                ? 'Live Telemetry'
+                : isAwaitingConnection
+                ? 'Awaiting Connection...'
+                : 'Device Offline'}
             </span>
           </div>
 
@@ -103,7 +122,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
         {/* 6. Combined Bottle Water Level + Hydration Module */}
         <CombinedBottleHydrationCard
-          waterLevel={bottle?.waterLevel ?? 640}
+          waterLevel={bottle?.waterLevel ?? 0}
           maxCapacity={bottle?.maxCapacity ?? 750}
           todayConsumed={todayConsumed}
           hydrationGoal={hydrationGoal}

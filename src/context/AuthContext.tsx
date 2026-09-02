@@ -11,9 +11,6 @@ import {
   sendPasswordResetEmail,
   deleteUser as fbDeleteUser,
   updateProfile as fbUpdateProfile,
-  reauthenticateWithPopup,
-  reauthenticateWithCredential,
-  EmailAuthProvider,
   User as FirebaseUser,
 } from 'firebase/auth';
 import {
@@ -21,7 +18,6 @@ import {
   getDoc,
   setDoc,
   updateDoc,
-  deleteDoc,
   runTransaction,
   serverTimestamp,
 } from 'firebase/firestore';
@@ -88,11 +84,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState<boolean>(true);
   const [isPairingModalOpen, setIsPairingModalOpen] = useState<boolean>(false);
 
-  // Initialize bottle registry & auth listener
+  // Initialize auth listener
   useEffect(() => {
     let isMounted = true;
 
-    // Seed default bottles if not present in Firestore
+    // Production seed service check (no-op in production)
     ensureKnownBottlesSeeded().catch(() => {});
 
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
@@ -113,7 +109,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 ...data,
                 bottleId: resolvedBottleId,
                 assignedBottleId: resolvedBottleId,
-                // Ensure photoUrl from Google Auth is captured if not present in doc
                 photoUrl: data.photoUrl || fbUser.photoURL || undefined,
                 notificationSettings: settings,
                 notifications: settings,
@@ -237,11 +232,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
       const fbUser = cred.user;
 
-      // Update Firebase Auth display name
       await fbUpdateProfile(fbUser, { displayName: name.trim() });
       setFirebaseUser(fbUser);
 
-      // Create users/{uid} Firestore document with bottleId = null
+      // Create users/{uid} Firestore document with clean slate
       const newProfile: UserProfile = {
         uid: fbUser.uid,
         name: name.trim(),
@@ -357,7 +351,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Delete account with robust full data wiping and authentication lifecycle management
+  // Delete account with robust full data wiping
   const deleteAccount = async (options?: string | DeleteAccountOptions) => {
     const currentUser = auth.currentUser;
     if (!currentUser) {
@@ -431,6 +425,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   // Pair bottle with Firestore atomic transaction & ownership verification
+  // Handles newly paired physical ESP32 bottles on a clean slate
   const pairBottle = async (bottleId: string) => {
     if (!user || !auth.currentUser) throw new Error('You must be signed in to pair a bottle.');
     const cleaned = bottleId.trim().toUpperCase();
@@ -439,32 +434,47 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const bottleRef = doc(db, 'bottles', cleaned);
     const userRef = doc(db, 'users', currentUid);
 
-    // Atomically check registry and claim ownership in a single Firestore transaction
     await runTransaction(db, async (transaction) => {
       const bottleSnap = await transaction.get(bottleRef);
 
-      // 1. Nonexistent bottle in registry -> reject immediately and do NOT create document
       if (!bottleSnap.exists()) {
-        throw new Error("That Bottle ID isn't registered with AquaSense X.");
+        // Document does not exist yet (clean slate / first-time ESP32 connection)
+        // Initialize the bottle record registered to current user, awaiting ESP32 telemetry
+        transaction.set(bottleRef, {
+          bottleId: cleaned,
+          ownerUid: currentUid,
+          online: false,
+          battery: 0,
+          waterLevel: 0,
+          maxCapacity: 750,
+          ph: null,
+          tds: null,
+          turbidity: null,
+          temperature: null,
+          qualityScore: null,
+          qualityCategory: 'Offline',
+          lastSyncTimestamp: null,
+          lastUpdated: new Date().toISOString(),
+          serverCreatedAt: serverTimestamp(),
+          serverUpdatedAt: serverTimestamp(),
+        });
+      } else {
+        const bottleData = bottleSnap.data();
+        const existingOwnerUid = bottleData.ownerUid ?? null;
+
+        // If claimed by another account, prevent collision
+        if (existingOwnerUid && existingOwnerUid !== currentUid) {
+          throw new Error('This bottle is already paired with another account.');
+        }
+
+        // Claim ownership
+        transaction.update(bottleRef, {
+          ownerUid: currentUid,
+          serverUpdatedAt: serverTimestamp(),
+        });
       }
 
-      const bottleData = bottleSnap.data();
-      const existingOwnerUid = bottleData.ownerUid ?? null;
-
-      // 2. Already owned by a different user -> reject claim
-      if (existingOwnerUid && existingOwnerUid !== currentUid) {
-        throw new Error('This bottle is already paired with another account.');
-      }
-
-      // 3. Unowned (or already owned by current user) -> claim bottle
-      transaction.update(bottleRef, {
-        ownerUid: currentUid,
-        online: true,
-        lastUpdated: new Date().toISOString(),
-        serverUpdatedAt: serverTimestamp(),
-      });
-
-      // 4. Update user profile with new bottleId and assignedBottleId
+      // Update user document
       transaction.update(userRef, {
         bottleId: cleaned,
         assignedBottleId: cleaned,
@@ -473,7 +483,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
     });
 
-    // 5. Update local React state after successful transaction
+    // Update local React state after transaction succeeds
     setUser((prev) =>
       prev
         ? {
@@ -488,7 +498,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsPairingModalOpen(false);
   };
 
-  // Unpair / Change bottle (Profile -> My Bottle -> Change Bottle)
+  // Unpair / Change bottle
   const unpairBottle = async () => {
     if (!auth.currentUser) throw new Error('You must be signed in to change a bottle.');
     const currentUid = auth.currentUser.uid;
@@ -506,11 +516,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const bottleRef = doc(db, 'bottles', currentBottleId);
           const bottleSnap = await transaction.get(bottleRef);
 
-          // 1. Verify the current user actually owns the current bottle
           if (bottleSnap.exists()) {
             const bData = bottleSnap.data();
             if (bData.ownerUid === currentUid) {
-              // 2. Atomically release ownerUid
               transaction.update(bottleRef, {
                 ownerUid: null,
                 lastUpdated: new Date().toISOString(),
@@ -520,7 +528,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         }
 
-        // 3. Clear users/{uid}.bottleId and assignedBottleId
         if (userSnap.exists()) {
           transaction.update(userDocRef, {
             bottleId: null,
@@ -542,10 +549,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           : null
       );
 
-      // 4. Open Bottle Pairing
       setIsPairingModalOpen(true);
     } catch (err: any) {
-      console.error('Error during unpair/change bottle transaction:', err);
+      console.error('Error during unpair bottle transaction:', err);
       throw new Error(getFirebaseErrorMessage(err));
     } finally {
       setLoading(false);
