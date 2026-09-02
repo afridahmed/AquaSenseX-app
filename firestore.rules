@@ -27,19 +27,21 @@ service cloud.firestore {
     }
 
     // 2. IoT Bottles:
-    // Pre-registered devices in physical registry. Arbitrary client creation is disabled in production.
+    // Pre-registered devices in physical registry.
     // Single-user ownership locking: unowned devices can only be claimed by an authenticated user.
     // Bonded devices can only be updated or released by their registered owner.
     match /bottles/{bottleId} {
-      allow read: if isAuthenticated();
-      allow create: if false; // Production hardware pre-registration only
-      allow update: if isAuthenticated() && (
+      allow read: if true;
+      allow create: if request.resource.data.bottleId == bottleId && (request.resource.data.ownerUid == null || request.resource.data.ownerUid == '');
+      allow update: if (
         // Case 1: Claiming an unowned bottle
-        ((resource.data.ownerUid == null || resource.data.ownerUid == '') && request.resource.data.ownerUid == request.auth.uid) ||
+        (isAuthenticated() && (resource.data.ownerUid == null || resource.data.ownerUid == '') && request.resource.data.ownerUid == request.auth.uid) ||
         // Case 2: Current registered owner updating telemetry or releasing bottle (setting ownerUid to null)
-        (resource.data.ownerUid == request.auth.uid && (request.resource.data.ownerUid == request.auth.uid || request.resource.data.ownerUid == null))
+        (isAuthenticated() && resource.data.ownerUid == request.auth.uid && (request.resource.data.ownerUid == request.auth.uid || request.resource.data.ownerUid == null)) ||
+        // Case 3: Maintenance resetting an unowned bottle
+        ((resource.data.ownerUid == null || resource.data.ownerUid == '') && request.resource.data.ownerUid == null)
       );
-      allow delete: if false;
+      allow delete: if (resource.data.ownerUid == null || resource.data.ownerUid == '');
 
       // Subcollection for bottle sensor logs
       match /readings/{readingId} {
