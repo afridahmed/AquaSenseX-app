@@ -191,8 +191,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (userSnap.exists()) {
         const data = userSnap.data() as UserProfile;
         const settings = normalizeNotificationSettings(data);
+        const resolvedBottleId = (data as any).assignedBottleId || data.bottleId || null;
         setUser({
           ...data,
+          assignedBottleId: resolvedBottleId,
+          bottleId: resolvedBottleId,
           notificationSettings: settings,
           notifications: settings,
         });
@@ -203,6 +206,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           email: fbUser.email || email,
           photoUrl: fbUser.photoURL || undefined,
           bottleId: null,
+          assignedBottleId: null,
           hydrationGoal: 2500,
           theme: 'dark',
           notificationSettings: DEFAULT_NOTIFICATIONS,
@@ -242,6 +246,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         email: fbUser.email || email.trim(),
         photoUrl: fbUser.photoURL || undefined,
         bottleId: null, // First-time user -> routes to Bottle Pairing
+        assignedBottleId: null,
         hydrationGoal: 2500,
         theme: 'dark',
         notificationSettings: DEFAULT_NOTIFICATIONS,
@@ -280,8 +285,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (userSnap.exists()) {
         const data = userSnap.data() as UserProfile;
         const settings = normalizeNotificationSettings(data);
+        const resolvedBottleId = (data as any).assignedBottleId || data.bottleId || null;
         setUser({
           ...data,
+          assignedBottleId: resolvedBottleId,
+          bottleId: resolvedBottleId,
           photoUrl: fbUser.photoURL || data.photoUrl || undefined,
           notificationSettings: settings,
           notifications: settings,
@@ -293,6 +301,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           email: fbUser.email || '',
           photoUrl: fbUser.photoURL || undefined,
           bottleId: null, // New user -> routes to Bottle Pairing
+          assignedBottleId: null,
           hydrationGoal: 2500,
           theme: 'dark',
           notificationSettings: DEFAULT_NOTIFICATIONS,
@@ -424,8 +433,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Pair bottle with Firestore atomic transaction & ownership verification
-  // Handles newly paired physical ESP32 bottles on a clean slate
+  // Pair bottle with strict physical hardware validation & single-user ownership locking
   const pairBottle = async (bottleId: string) => {
     if (!user || !auth.currentUser) throw new Error('You must be signed in to pair a bottle.');
     const cleaned = bottleId.trim().toUpperCase();
@@ -434,68 +442,86 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const bottleRef = doc(db, 'bottles', cleaned);
     const userRef = doc(db, 'users', currentUid);
 
-    await runTransaction(db, async (transaction) => {
-      const bottleSnap = await transaction.get(bottleRef);
+    try {
+      await runTransaction(db, async (transaction) => {
+        const bottleSnap = await transaction.get(bottleRef);
 
-      if (!bottleSnap.exists()) {
-        // Document does not exist yet (clean slate / first-time ESP32 connection)
-        // Initialize the bottle record registered to current user, awaiting ESP32 telemetry
-        transaction.set(bottleRef, {
-          bottleId: cleaned,
-          ownerUid: currentUid,
-          online: false,
-          battery: 0,
-          waterLevel: 0,
-          maxCapacity: 750,
-          ph: null,
-          tds: null,
-          turbidity: null,
-          temperature: null,
-          qualityScore: null,
-          qualityCategory: 'Offline',
-          lastSyncTimestamp: null,
-          lastUpdated: new Date().toISOString(),
-          serverCreatedAt: serverTimestamp(),
-          serverUpdatedAt: serverTimestamp(),
-        });
-      } else {
-        const bottleData = bottleSnap.data();
-        const existingOwnerUid = bottleData.ownerUid ?? null;
-
-        // If claimed by another account, prevent collision
-        if (existingOwnerUid && existingOwnerUid !== currentUid) {
-          throw new Error('This bottle is already paired with another account.');
+        // Condition 1 (Invalid Device): If the document bottles/{BOTTLE_ID} DOES NOT exist in Firestore
+        if (!bottleSnap.exists()) {
+          throw new Error('Invalid Bottle ID. Please enter a valid identifier printed on your AquaSense X device.');
         }
 
-        // Claim ownership
+        const bottleData = bottleSnap.data();
+        const existingOwnerUid = bottleData.ownerUid ? String(bottleData.ownerUid).trim() : null;
+
+        // Condition 2 (Already Claimed): If the document exists AND ownerUid is non-null AND ownerUid !== currentUserId
+        if (existingOwnerUid && existingOwnerUid !== currentUid) {
+          throw new Error('This bottle is already linked to another account. Contact support if this is an error.');
+        }
+
+        // Condition 3 (Success / Ownership Claim): If document exists AND (ownerUid is null/empty OR ownerUid === currentUserId)
+        // Check if user previously had another bottle registered and release previous ownership
+        const userSnap = await transaction.get(userRef);
+        const prevBottleId = userSnap.exists()
+          ? (userSnap.data()?.assignedBottleId || userSnap.data()?.bottleId)
+          : (user?.assignedBottleId || user?.bottleId);
+
+        if (prevBottleId && prevBottleId !== cleaned) {
+          const prevBottleRef = doc(db, 'bottles', prevBottleId);
+          const prevBottleSnap = await transaction.get(prevBottleRef);
+          if (prevBottleSnap.exists() && prevBottleSnap.data()?.ownerUid === currentUid) {
+            transaction.update(prevBottleRef, {
+              ownerUid: null,
+              serverUpdatedAt: serverTimestamp(),
+            });
+          }
+        }
+
+        // Atomically update bottles/{BOTTLE_ID} with ownerUid: currentUserId
         transaction.update(bottleRef, {
           ownerUid: currentUid,
           serverUpdatedAt: serverTimestamp(),
         });
-      }
 
-      // Update user document
-      transaction.update(userRef, {
-        bottleId: cleaned,
-        assignedBottleId: cleaned,
-        updatedAt: new Date().toISOString(),
-        serverUpdatedAt: serverTimestamp(),
+        // Atomically update users/{currentUserId} with assignedBottleId: BOTTLE_ID
+        transaction.update(userRef, {
+          assignedBottleId: cleaned,
+          bottleId: cleaned,
+          updatedAt: new Date().toISOString(),
+          serverUpdatedAt: serverTimestamp(),
+        });
       });
-    });
 
-    // Update local React state after transaction succeeds
-    setUser((prev) =>
-      prev
-        ? {
-            ...prev,
-            bottleId: cleaned,
-            assignedBottleId: cleaned,
-            updatedAt: new Date().toISOString(),
-          }
-        : null
-    );
+      // Update local React state after transaction succeeds
+      setUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              assignedBottleId: cleaned,
+              bottleId: cleaned,
+              updatedAt: new Date().toISOString(),
+            }
+          : null
+      );
 
-    setIsPairingModalOpen(false);
+      setIsPairingModalOpen(false);
+    } catch (err: any) {
+      console.error('Error pairing bottle:', err);
+      if (
+        err.message === 'Invalid Bottle ID. Please enter a valid identifier printed on your AquaSense X device.' ||
+        err.message === 'This bottle is already linked to another account. Contact support if this is an error.'
+      ) {
+        throw err;
+      }
+      if (
+        err.code === 'permission-denied' ||
+        err.message?.includes('permission-denied') ||
+        err.message?.includes('Missing or insufficient permissions')
+      ) {
+        throw new Error('This bottle is already linked to another account. Contact support if this is an error.');
+      }
+      throw new Error(err.message || 'Invalid Bottle ID. Please enter a valid identifier printed on your AquaSense X device.');
+    }
   };
 
   // Unpair / Change bottle

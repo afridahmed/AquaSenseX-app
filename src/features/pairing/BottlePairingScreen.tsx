@@ -30,20 +30,10 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
   >('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
 
-  // Auto-format ASX-XXXX-XXXX
+  // Handle bottle ID input
   const handleInputChange = (val: string) => {
-    let clean = val.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    if (clean.startsWith('ASX')) {
-      clean = clean.substring(3);
-    }
-    let formatted = 'ASX';
-    if (clean.length > 0) {
-      formatted += '-' + clean.substring(0, 4);
-    }
-    if (clean.length > 4) {
-      formatted += '-' + clean.substring(4, 8);
-    }
-    setBottleInput(formatted);
+    const clean = val.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    setBottleInput(clean);
     setStatus('idle');
     setErrorMessage('');
   };
@@ -52,13 +42,9 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
     e.preventDefault();
     const cleanId = bottleInput.trim().toUpperCase();
 
-    // Check formatting
-    const isValidFormat =
-      /^ASX-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(cleanId) ||
-      /^ASX-[0-9]{4}-[0-9]{4}$/.test(cleanId);
-    if (!isValidFormat && cleanId.length < 8) {
+    if (!cleanId || cleanId.length < 3) {
       setStatus('error');
-      setErrorMessage('Please enter a valid Bottle ID (e.g. ASX-XXXX-XXXX).');
+      setErrorMessage('Please enter a valid identifier printed on your AquaSense X device.');
       return;
     }
 
@@ -72,11 +58,11 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
       setStatus('success');
       setTimeout(() => {
         if (onPaired) onPaired();
-      }, 1000);
+      }, 900);
     } catch (err: any) {
       setStatus('error');
       setErrorMessage(
-        err.message || 'Connection failed. Please check the bottle ID and try again.'
+        err.message || 'Invalid Bottle ID. Please enter a valid identifier printed on your AquaSense X device.'
       );
     }
   };
@@ -103,7 +89,7 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
           </div>
 
           {/* Icon-Only Action Button with shrink-0 Flex Guard */}
-          {isChangeBottle && user?.bottleId ? (
+          {isChangeBottle && (user?.assignedBottleId || user?.bottleId) ? (
             <button
               id="btn-pairing-cancel"
               type="button"
@@ -238,7 +224,7 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
                 value={bottleInput}
                 onChange={(e) => handleInputChange(e.target.value)}
                 placeholder="ASX-XXXX-XXXX"
-                maxLength={13}
+                maxLength={20}
                 className="w-full bg-[#090B0E] border border-white/10 rounded-2xl px-3.5 xs:px-4 py-3 text-sm sm:text-base font-mono text-center tracking-wider xs:tracking-widest text-[#00D1FF] placeholder-neutral-600 focus:outline-none focus:border-[#00D1FF]/50 transition-colors uppercase"
               />
             </div>

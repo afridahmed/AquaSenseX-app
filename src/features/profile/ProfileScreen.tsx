@@ -297,22 +297,23 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
             </div>
 
             <button
-              onClick={() => {
-                setChangeBottleError('');
-                setIsChangeBottleModalOpen(true);
-              }}
+              id="btn-change-bottle"
+              type="button"
+              onClick={() => onChangeBottle()}
               disabled={isReleasingBottle}
-              className="flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-white/[0.06] hover:bg-[#00D1FF]/15 text-white hover:text-[#00D1FF] border border-white/10 hover:border-[#00D1FF]/30 text-xs font-medium transition-all shadow-sm touch-target sm:min-h-0 sm:min-w-0 disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-[#00D1FF]/10 hover:bg-[#00D1FF]/20 text-[#00D1FF] border border-[#00D1FF]/30 hover:border-[#00D1FF]/50 text-xs font-semibold transition-all shadow-sm touch-target sm:min-h-0 sm:min-w-0 cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Change</span>
+              <span>Change Bottle</span>
             </button>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-xs">
             <div className="p-3 sm:p-3.5 rounded-2xl bg-[#090B0E] border border-white/5">
-              <span className="text-[9px] sm:text-[10px] text-neutral-500 uppercase tracking-wider block mb-0.5">BOTTLE ID</span>
-              <span className="font-mono font-semibold text-white truncate block">{bottle?.bottleId || user?.bottleId || 'Not connected'}</span>
+              <span className="text-[9px] sm:text-[10px] text-neutral-500 uppercase tracking-wider block mb-0.5">LINKED BOTTLE</span>
+              <span className="font-mono font-semibold text-[#00D1FF] truncate block">
+                {user?.assignedBottleId || user?.bottleId || bottle?.bottleId || 'Not connected'}
+              </span>
             </div>
             <div className="p-3 sm:p-3.5 rounded-2xl bg-[#090B0E] border border-white/5">
               <span className="text-[9px] sm:text-[10px] text-neutral-500 uppercase tracking-wider block mb-0.5">STATUS</span>

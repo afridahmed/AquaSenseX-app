@@ -4,7 +4,7 @@ import { BottleProvider, useBottle } from './context/BottleContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { SplashScreen } from './features/splash/SplashScreen';
 import { AuthScreen } from './features/auth/AuthScreen';
-import { BottlePairingScreen } from './features/pairing/BottlePairingScreen';
+import { BottlePairingModal } from './components/BottlePairingModal';
 import { DashboardScreen } from './features/dashboard/DashboardScreen';
 import { CommunityMapScreen } from './features/community/CommunityMapScreen';
 import { AICoachScreen } from './features/coach/AICoachScreen';
@@ -57,13 +57,31 @@ const MainAppContent: React.FC = () => {
     return <AuthScreen />;
   }
 
-  // Step 4: First-time Onboarding: User has no paired bottle -> Show Bottle Pairing
-  // (Pairing is strictly a one-time onboarding step; once paired, user goes straight to dashboard)
-  const hasAssignedBottle = Boolean(user.bottleId || user.assignedBottleId);
-  if (!hasAssignedBottle || isPairingModalOpen) {
+  // Step 4: Strict One-Time Pairing Navigation State Machine
+  // - If assignedBottleId is missing/null: Force the user to complete the BottlePairingModal (cannot be dismissed)
+  // - If assignedBottleId exists: Skip the pairing modal completely and route directly to AppLayout
+  // - If isPairingModalOpen is triggered from Profile: Show BottlePairingModal in change mode
+  const hasAssignedBottle = Boolean(
+    (user.assignedBottleId && user.assignedBottleId.trim() !== '') ||
+    (user.bottleId && user.bottleId.trim() !== '')
+  );
+
+  if (!hasAssignedBottle) {
     return (
-      <BottlePairingScreen
-        isChangeBottle={isPairingModalOpen}
+      <BottlePairingModal
+        isChangeBottle={false}
+        onPaired={() => {
+          setIsPairingModalOpen(false);
+          setCurrentTab('dashboard');
+        }}
+      />
+    );
+  }
+
+  if (isPairingModalOpen) {
+    return (
+      <BottlePairingModal
+        isChangeBottle={true}
         onPaired={() => {
           setIsPairingModalOpen(false);
           setCurrentTab('dashboard');

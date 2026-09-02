@@ -27,12 +27,12 @@ service cloud.firestore {
     }
 
     // 2. IoT Bottles:
-    // Production & dev bottles must already exist in registry. Arbitrary user creation is blocked.
-    // Bottle claiming is atomic and secure: unowned bottles can only be claimed by setting ownerUid = request.auth.uid.
-    // Owned bottles can only be updated or released by their registered owner.
+    // Pre-registered devices in physical registry. Arbitrary client creation is disabled in production.
+    // Single-user ownership locking: unowned devices can only be claimed by an authenticated user.
+    // Bonded devices can only be updated or released by their registered owner.
     match /bottles/{bottleId} {
       allow read: if isAuthenticated();
-      allow create: if false; // Users cannot create arbitrary production bottles
+      allow create: if false; // Production hardware pre-registration only
       allow update: if isAuthenticated() && (
         // Case 1: Claiming an unowned bottle
         ((resource.data.ownerUid == null || resource.data.ownerUid == '') && request.resource.data.ownerUid == request.auth.uid) ||
