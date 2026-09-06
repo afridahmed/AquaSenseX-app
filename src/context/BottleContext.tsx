@@ -56,7 +56,7 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const bottleId = user?.bottleId || user?.assignedBottleId;
   const hydrationGoal = user?.hydrationGoal || 2500;
 
-  // Immediate state wiping on user logout or unpairing
+  // Immediate state wiping on user logout, unpairing, or bottle change
   useEffect(() => {
     if (!user) {
       setBottle(null);
@@ -81,8 +81,13 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }
 
       const syncObj = (bottle.lastSyncTimestamp || bottle.lastUpdated) as any;
+
+      // Bug fix: If the hardware reports online=true but no timestamp is available
+      // (e.g. initial Firestore snapshot before the simulator writes fresh data),
+      // treat the device as recently synced. The watchdog will naturally expire
+      // in 45 seconds if no fresh data arrives — this prevents false offline flicker.
       if (!syncObj) {
-        setIsHardwareTimedOut(!bottle.online);
+        setIsHardwareTimedOut(false);
         return;
       }
 
@@ -98,7 +103,9 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }
 
       if (isNaN(lastSyncMs) || lastSyncMs <= 0) {
-        setIsHardwareTimedOut(!bottle.online);
+        // Bug fix: Unknown/unparseable timestamp on an online device — don't mark offline.
+        // Give it the benefit of the doubt; the watchdog will expire naturally.
+        setIsHardwareTimedOut(false);
         return;
       }
 
@@ -157,8 +164,15 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // Subscribe to real-time IoT bottle telemetry via Firestore provider
   useEffect(() => {
+    // Bug fix: Reset bottle state to null immediately whenever the bottleId changes
+    // (including when it becomes null after unpairBottle). Without this reset, the
+    // previous user's BottleData persists in state while the new subscription is
+    // initializing, causing stale "Invalid Bottle ID" / "Already Owned" validation
+    // errors in the pairing flow and data bleeding between accounts.
+    setBottle(null);
+    setIsHardwareTimedOut(false);
+
     if (!bottleId) {
-      setBottle(null);
       return;
     }
 
@@ -194,6 +208,13 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         lastSyncTimeMs = parsed;
       }
     }
+  }
+
+  // Bug fix: If the device reports online=true but has no parseable timestamp
+  // (e.g. initial snapshot before simulator writes, or missing field), treat
+  // it as synced right now so the watchdog never falsely trips on mount.
+  if (bottle?.online === true && (lastSyncTimeMs === null || isNaN(lastSyncTimeMs) || lastSyncTimeMs <= 0)) {
+    lastSyncTimeMs = Date.now();
   }
 
   const hasSyncedOnce = Boolean(lastSyncTimeMs && !isNaN(lastSyncTimeMs) && lastSyncTimeMs > 0);

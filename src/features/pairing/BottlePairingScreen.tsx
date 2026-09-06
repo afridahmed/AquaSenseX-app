@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -56,12 +56,25 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
   onPaired,
   isChangeBottle = false,
 }) => {
-  const { pairBottle, setIsPairingModalOpen, signOut, user } = useAuth();
+  const { pairBottle, setIsPairingModalOpen, signOut, user, isPairingModalOpen } = useAuth();
   const [bottleInput, setBottleInput] = useState<string>('');
   const [status, setStatus] = useState<
     'idle' | 'validating' | 'found' | 'success' | 'error'
   >('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
+
+  // Bug fix: Reset local form state every time the pairing modal is opened.
+  // Without this, a user who typed a bottle ID (e.g. ASX-PROD-01), released it,
+  // and immediately tries to re-pair the same bottle ID will see the stale input
+  // still in the field and the old status still set — which can suppress the
+  // 'validating' state or show a leftover error from the previous attempt.
+  useEffect(() => {
+    if (isPairingModalOpen) {
+      setBottleInput('');
+      setStatus('idle');
+      setErrorMessage('');
+    }
+  }, [isPairingModalOpen]);
 
   // Handle bottle ID input with automatic uppercase, masking & hyphen insertion
   const handleBottleIdChange = (val: string) => {

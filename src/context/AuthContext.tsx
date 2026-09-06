@@ -347,6 +347,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Sign out with comprehensive state & storage wiping
   const signOut = async () => {
+    // Bug fix: Wipe pairing modal state immediately (before async sign-out) so
+    // the modal never bleeds into a new session if the sign-in flow is fast.
+    setIsPairingModalOpen(false);
     setLoading(true);
     try {
       await fbSignOut(auth);
@@ -356,7 +359,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // 1. Wipe Firebase and App Context state
       setFirebaseUser(null);
       setUser(null);
-      setIsPairingModalOpen(false);
 
       // 2. Comprehensive purging of all local storage, session state, and cached credentials
       try {
@@ -482,11 +484,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         // Condition 3 (Success / Ownership Claim): If document exists AND (ownerUid is null/empty OR ownerUid === currentUserId)
-        // Check if user previously had another bottle registered and release previous ownership
+        // Check if user previously had another bottle registered and release previous ownership.
+        // Bug fix: Read prevBottleId exclusively from Firestore (userSnap.data()), NOT from
+        // the React closure-captured `user` state. The closure state may be stale if
+        // unpairBottle() was called moments before (setUser is async/batched), causing the
+        // transaction to incorrectly attempt releasing a bottle that was already released.
         const userSnap = await transaction.get(userRef);
         const prevBottleId = userSnap.exists()
-          ? (userSnap.data()?.assignedBottleId || userSnap.data()?.bottleId)
-          : (user?.assignedBottleId || user?.bottleId);
+          ? (userSnap.data()?.assignedBottleId || userSnap.data()?.bottleId || null)
+          : null;
 
         if (prevBottleId && prevBottleId.trim().toUpperCase() !== cleaned) {
           const prevBottleRef = doc(db, 'bottles', prevBottleId.trim().toUpperCase());
@@ -614,7 +620,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       });
 
-      // Atomically wipe local user context state
+      // Bug fix: Wipe local user context state synchronously so BottleContext's
+      // useEffect([bottleId]) fires with bottleId=null BEFORE the pairing modal opens.
+      // This ensures the Firestore onSnapshot subscription for the old bottle is torn
+      // down and bottle state is null by the time the pairing form validates input.
       setUser((prev) =>
         prev
           ? {
@@ -626,12 +635,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           : null
       );
 
-      // Wipe any cached pairing references from storage
+      // Wipe ALL bottle-related caches from localStorage so entering the same bottle ID
+      // again for re-pairing never triggers stale "Already Owned" validation errors.
       try {
         localStorage.removeItem('aquasense_last_bottle');
-      } catch {}
+        // Also sweep any other asx_/aquasense_ keys that may cache bottle ownership state
+        Object.keys(localStorage).forEach((key) => {
+          if (key.startsWith('asx_bottle_') || key.startsWith('aquasense_bottle_')) {
+            localStorage.removeItem(key);
+          }
+        });
+      } catch { /* non-critical */ }
 
-      setIsPairingModalOpen(true);
+      // Bug fix: Defer setIsPairingModalOpen(true) to a microtask so React's state
+      // batching flushes the user state wipe (bottleId → null) first. This guarantees
+      // BottleContext's subscriber effect has already run setBottle(null) before the
+      // pairing screen mounts and validates the new bottle ID.
+      queueMicrotask(() => {
+        setIsPairingModalOpen(true);
+      });
     } catch (err: any) {
       console.error('Error during unpair bottle transaction:', err);
       throw new Error(getFirebaseErrorMessage(err));

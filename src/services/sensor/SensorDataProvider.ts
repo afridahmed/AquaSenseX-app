@@ -83,6 +83,12 @@ export class FirestoreSensorDataProvider implements ISensorDataProvider {
         parseTimestampToISO(raw.lastUpdated) ||
         parseTimestampToISO(raw.serverUpdatedAt);
 
+      // Bug fix: If the hardware reports online=true but all timestamp fields are missing or
+      // unparseable (e.g. server sentinel Timestamp not yet resolved, or initial write race),
+      // fall back to Date.now() so the 45-second watchdog in BottleContext never falsely
+      // considers the device offline on initial subscription.
+      const resolvedLastSync = parsedLastSync ?? (isOnline ? new Date().toISOString() : undefined);
+
       // Extract valid numbers if present
       const ph = typeof raw.ph === 'number' && !isNaN(raw.ph) ? raw.ph : null;
       const tds = typeof raw.tds === 'number' && !isNaN(raw.tds) ? raw.tds : null;
@@ -112,8 +118,8 @@ export class FirestoreSensorDataProvider implements ISensorDataProvider {
         ph,
         waterLevel: typeof raw.waterLevel === 'number' && !isNaN(raw.waterLevel) ? raw.waterLevel : 0,
         maxCapacity: typeof raw.maxCapacity === 'number' && !isNaN(raw.maxCapacity) ? raw.maxCapacity : 750,
-        lastUpdated: parseTimestampToISO(raw.lastUpdated) || parsedLastSync || new Date().toISOString(),
-        lastSyncTimestamp: parsedLastSync,
+        lastUpdated: parseTimestampToISO(raw.lastUpdated) || resolvedLastSync || new Date().toISOString(),
+        lastSyncTimestamp: resolvedLastSync,
         qualityScore: isOnline ? (typeof raw.qualityScore === 'number' ? raw.qualityScore : evalResult.score) : evalResult.score,
         qualityCategory: isOnline
           ? (raw.qualityCategory && raw.qualityCategory !== 'Offline' ? raw.qualityCategory : evalResult.category)
@@ -163,6 +169,31 @@ export class FirestoreSensorDataProvider implements ISensorDataProvider {
 
       // For mock bottle ASX-PROD-02, maintain an active simulator heartbeat to ensure connection status
       if (cleanedId === 'ASX-PROD-02') {
+        // Bug fix: Clear any pre-existing timer for this bottle before registering a new one.
+        // Without this, re-subscribing (e.g. after release + re-pair) creates duplicate intervals.
+        if (this.activeSimTimers.has(cleanedId)) {
+          clearInterval(this.activeSimTimers.get(cleanedId));
+          this.activeSimTimers.delete(cleanedId);
+        }
+
+        // Bug fix: Immediately emit a synthetic "connected" event with the current timestamp so
+        // the BottleContext watchdog never sees a stale lastSyncTimestamp on initial mount.
+        // This prevents the "Offline" flicker that occurs between subscription and the first
+        // Firestore write from the simulator (up to 5 seconds).
+        const nowIsoImmediate = new Date().toISOString();
+        emitEvaluated({
+          bottleId: cleanedId,
+          online: true,
+          ph: 7.25,
+          tds: 142,
+          temperature: 21.2,
+          turbidity: 0.28,
+          waterLevel: 650,
+          battery: 95,
+          lastSyncTimestamp: nowIsoImmediate,
+          lastUpdated: nowIsoImmediate,
+        });
+
         const pingInterval = setInterval(async () => {
           try {
             const now = Date.now();
@@ -192,6 +223,8 @@ export class FirestoreSensorDataProvider implements ISensorDataProvider {
               { merge: true }
             );
           } catch (simErr) {
+            // Bug fix: On write failure (network hiccup), emit locally with a fresh timestamp
+            // so the watchdog never trips due to a transient Firestore write error.
             const nowIso = new Date().toISOString();
             emitEvaluated({
               bottleId: cleanedId,
