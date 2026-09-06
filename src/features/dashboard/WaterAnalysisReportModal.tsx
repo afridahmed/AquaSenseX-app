@@ -397,41 +397,59 @@ Overall Score: ${qualityScore}/100 (${qualityCategory})
               </button>
             </div>
 
-            {/* 3. Built-in Prompt / Toggle: "Share to Community Map" */}
+            {/* 3. Interactive Prompt: "Publish to Community Map?" */}
             <div className="rounded-2xl bg-[#090B0E] border border-white/10 p-3.5 sm:p-4 space-y-3">
-              {/* Toggle Row */}
-              <div className="flex items-center justify-between gap-3">
+              {/* Interactive Prompt Header & Choice Buttons */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-xl bg-[#00D1FF]/15 border border-[#00D1FF]/30 text-[#00D1FF] flex items-center justify-center shrink-0">
-                    <Share2 className="w-4 h-4 text-[#00D1FF]" />
+                  <div className="w-9 h-9 rounded-xl bg-[#00D1FF]/15 border border-[#00D1FF]/30 text-[#00D1FF] flex items-center justify-center shrink-0">
+                    <Share2 className="w-4.5 h-4.5 text-[#00D1FF]" />
                   </div>
                   <div className="min-w-0">
-                    <h4 className="text-xs sm:text-sm font-semibold text-white truncate">
-                      Share to Community Map
+                    <h4 className="text-xs sm:text-sm font-bold text-white">
+                      Publish to Community Map?
                     </h4>
-                    <p className="text-[11px] text-neutral-400 truncate">
-                      Publish verified test to the global crowd-sourced water map
+                    <p className="text-[11px] text-neutral-400">
+                      Share this verified test to help others locate safe drinking water
                     </p>
                   </div>
                 </div>
 
-                {/* Switch Toggle */}
-                <button
-                  type="button"
-                  onClick={() => setShareToCommunity(!shareToCommunity)}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    shareToCommunity ? 'bg-[#00D1FF]' : 'bg-neutral-800'
-                  }`}
-                  role="switch"
-                  aria-checked={shareToCommunity}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-[#090B0E] shadow-lg ring-0 transition duration-200 ease-in-out ${
-                      shareToCommunity ? 'translate-x-5' : 'translate-x-0'
+                {/* Interactive Choice Selector */}
+                <div className="flex items-center gap-1.5 p-1 rounded-xl bg-white/[0.04] border border-white/5 shrink-0 self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setShareToCommunity(true)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      shareToCommunity
+                        ? 'bg-[#00D1FF] text-[#090B0E] shadow-sm shadow-[#00D1FF]/20'
+                        : 'text-neutral-400 hover:text-white'
                     }`}
-                  />
-                </button>
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Yes, Share to Map</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShareToCommunity(false)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      !shareToCommunity
+                        ? 'bg-white/10 text-white'
+                        : 'text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    <span>Keep Private</span>
+                  </button>
+                </div>
               </div>
+
+              {/* Private State Notice */}
+              {!shareToCommunity && (
+                <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 text-xs text-neutral-400 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>This test result remains private on your local device. It will not be broadcast to the community map.</span>
+                </div>
+              )}
 
               {/* Collapsible Community Submission Form */}
               <AnimatePresence>

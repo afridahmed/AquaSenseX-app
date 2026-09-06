@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { WaterAnalysisReportModal } from './WaterAnalysisReportModal';
+import { SmartwatchECGTelemetryView } from './SmartwatchECGTelemetryView';
 
 export interface AnalysisResult {
   ph: number | null;
@@ -221,59 +222,23 @@ export const TestWaterActionCard: React.FC<TestWaterActionCardProps> = ({
 
         <div className="relative z-10 p-3.5 xs:p-4 sm:p-5">
           <AnimatePresence mode="wait">
-            {/* STATE 1: Analyzing in Progress (Smartwatch 15s Sampling HUD) */}
+            {/* STATE 1: Analyzing in Progress (Smartwatch 15s ECG Sampling HUD) */}
             {isAnalyzing ? (
               <motion.div
                 key="analyzing-state"
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
-                className="flex flex-col gap-3"
               >
-                {/* Top status bar */}
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-[#00D1FF]/15 border border-[#00D1FF]/30 text-[#00D1FF] flex items-center justify-center shrink-0">
-                      <Activity className="w-4 h-4 animate-spin text-[#00D1FF]" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs sm:text-sm font-semibold text-white truncate">
-                          Stabilizing sensor readings... (Sampling)
-                        </span>
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#00D1FF] animate-ping" />
-                      </div>
-                      <p className="text-[11px] text-neutral-400 truncate">
-                        Buffering live ESP32 optical and electrochemical packets
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs font-mono font-bold text-[#00D1FF] bg-[#00D1FF]/10 px-2.5 py-1 rounded-lg border border-[#00D1FF]/20">
-                      {Math.max(1, Math.ceil(15 - (scanProgress / 100) * 15))}s remaining
-                    </span>
-                  </div>
-                </div>
-
-                {/* High-tech Progress Bar */}
-                <div className="w-full bg-[#090B0E] h-2 rounded-full overflow-hidden border border-white/10 p-0.5">
-                  <motion.div
-                    className="bg-gradient-to-r from-[#00D1FF] via-[#00E5FF] to-[#38BDF8] h-full rounded-full shadow-sm shadow-[#00D1FF]/50"
-                    style={{ width: `${scanProgress}%` }}
-                    transition={{ ease: 'linear' }}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between text-[11px] text-neutral-400 font-mono">
-                  <span className="flex items-center gap-1 text-[#00D1FF]">
-                    <Sparkles className="w-3 h-3" />
-                    <span>{scanProgress}% stabilized</span>
-                  </span>
-                  <span className="truncate">
-                    {readingBuffer.length} packet{readingBuffer.length === 1 ? '' : 's'} recorded
-                  </span>
-                </div>
+                <SmartwatchECGTelemetryView
+                  scanProgress={scanProgress}
+                  remainingSeconds={Math.max(1, Math.ceil(15 - (scanProgress / 100) * 15))}
+                  packetCount={readingBuffer.length}
+                  currentPh={activeBottleData?.ph}
+                  currentTds={activeBottleData?.tds}
+                  currentTurbidity={activeBottleData?.turbidity}
+                  currentTemp={activeBottleData?.temperature}
+                />
               </motion.div>
             ) : analysisResult ? (
               /* STATE 2: After Analysis Completed (Verified Metrics Summary & Unlocked Report Action) */

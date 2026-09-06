@@ -12,6 +12,7 @@ import { createCommunityReport } from '../../services/community/communityService
 import { evaluateWaterQuality } from '../../services/waterQuality/qualityEvaluator';
 import { AnalysisResult } from '../dashboard/TestWaterActionCard';
 import { WaterAnalysisReportModal } from '../dashboard/WaterAnalysisReportModal';
+import { SmartwatchECGTelemetryView } from '../dashboard/SmartwatchECGTelemetryView';
 import { BottleData, CommunityReport } from '../../types';
 import L from 'leaflet';
 import {
@@ -705,51 +706,22 @@ export const CommunityReportMode: React.FC<CommunityReportModeProps> = ({
           <div className="space-y-3 pb-3 border-b border-white/10">
             <AnimatePresence mode="wait">
               {isAnalyzing ? (
-                /* STATE 1: Sampling HUD */
+                /* STATE 1: Smartwatch ECG Sampling HUD */
                 <motion.div
                   key="analyzing"
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}
-                  className="space-y-2.5"
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-8 h-8 rounded-xl bg-[#00D1FF]/15 border border-[#00D1FF]/30 text-[#00D1FF] flex items-center justify-center shrink-0">
-                        <Activity className="w-4 h-4 animate-spin text-[#00D1FF]" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs sm:text-sm font-semibold text-white truncate">
-                            Stabilizing sensor readings...
-                          </span>
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#00D1FF] animate-ping" />
-                        </div>
-                        <p className="text-[11px] text-neutral-400 truncate">
-                          Buffering optical and electrochemical packets
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-mono font-bold text-[#00D1FF] bg-[#00D1FF]/10 px-2 py-0.5 rounded-lg border border-[#00D1FF]/20 shrink-0">
-                      {Math.max(1, Math.ceil(15 - (scanProgress / 100) * 15))}s remaining
-                    </span>
-                  </div>
-
-                  {/* Progress Bar */}
-                  <div className="w-full bg-[#090B0E] h-2 rounded-full overflow-hidden border border-white/10 p-0.5">
-                    <motion.div
-                      className="bg-gradient-to-r from-[#00D1FF] via-[#00E5FF] to-[#38BDF8] h-full rounded-full"
-                      style={{ width: `${scanProgress}%` }}
-                      transition={{ ease: 'linear' }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-[10px] text-neutral-400 font-mono">
-                    <span className="flex items-center gap-1 text-[#00D1FF]">
-                      <Sparkles className="w-3 h-3" />
-                      <span>{scanProgress}% stabilized</span>
-                    </span>
-                    <span>{readingBuffer.length} packets buffered</span>
-                  </div>
+                  <SmartwatchECGTelemetryView
+                    scanProgress={scanProgress}
+                    remainingSeconds={Math.max(1, Math.ceil(15 - (scanProgress / 100) * 15))}
+                    packetCount={readingBuffer.length}
+                    currentPh={bottle?.ph}
+                    currentTds={bottle?.tds}
+                    currentTurbidity={bottle?.turbidity}
+                    currentTemp={bottle?.temperature}
+                  />
                 </motion.div>
               ) : analysisResult ? (
                 /* STATE 2: Verified Analysis Averages Display */
