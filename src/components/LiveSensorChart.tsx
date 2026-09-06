@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { BottleData } from '../../types';
+import { BottleData } from '../types';
 
 export interface LiveSensorChartProps {
   readingBuffer: BottleData[];

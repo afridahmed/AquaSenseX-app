@@ -4,6 +4,8 @@ import { useAuth } from './AuthContext';
 import { defaultSensorProvider } from '../services/sensor/SensorDataProvider';
 import { evaluateWaterQuality } from '../services/waterQuality/qualityEvaluator';
 import { db } from '../services/firebase/firebaseConfig';
+import { triggerBottleVibration } from '../services/firebase/vibrationService';
+import { notificationService } from '../services/notifications/notificationService';
 import {
   collection,
   addDoc,
@@ -39,6 +41,7 @@ interface BottleContextType {
   simulateAbnormalWater: (preset: 'acidic' | 'turbid' | 'mineral_overload' | 'optimal') => void;
   simulateToggleOnline: () => void;
   refreshAiTip: () => Promise<void>;
+  triggerHardwareVibration: () => Promise<void>;
   isMockMode: boolean;
 }
 
@@ -190,10 +193,12 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   // Ref to track physical bottle water level changes across snapshots
   const prevPhysicalLevelMlRef = useRef<number | null>(null);
 
-  // Normalize live bottle water level to milliliters (handles both 0-100% and raw ml)
+  // Normalize live bottle water level to milliliters.
+  // The ESP32 ToF sensor reports waterLevel as a 0-100 percentage.
+  // Physical bottle capacity is 2000 ml (2L), so 10% drop = 200 ml consumed.
   const currentPhysicalLevelMl = useMemo(() => {
     if (!bottle || bottle.waterLevel === null || bottle.waterLevel === undefined) return null;
-    const maxCap = bottle.maxCapacity || 750;
+    const maxCap = bottle.maxCapacity || 2000; // Default: 2L physical bottle
     if (bottle.waterLevel <= 100 && maxCap > 100) {
       return Math.round((bottle.waterLevel / 100) * maxCap);
     }
@@ -312,6 +317,128 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     : null;
 
   const isStale = !isDeviceOnline;
+
+  // ─── SMART HYDRATION REMINDER ENGINE ────────────────────────────────────────
+  // Fires a "drink water" reminder + hardware vibration ONLY if the user has
+  // consumed less than 400 ml within the configured reminder interval.
+  // If they've already drunk ≥ 400 ml, the timer silently resets.
+  const hydrationLogsRef = useRef(hydrationLogs);
+  useEffect(() => { hydrationLogsRef.current = hydrationLogs; }, [hydrationLogs]);
+
+  const bottleIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    bottleIdRef.current = bottle?.bottleId ?? undefined;
+  }, [bottle?.bottleId]);
+
+  useEffect(() => {
+    const settings = user?.notificationSettings;
+    if (!settings?.drinkReminders) return;
+
+    const intervalMinutes = settings.drinkReminderIntervalMinutes || 60;
+    const intervalMs = intervalMinutes * 60 * 1000;
+
+    const DRINK_THRESHOLD_ML = 400; // The 400 ml rule
+
+    const timerId = setInterval(async () => {
+      // Check active window (08:00 – 22:00 by default)
+      const now = new Date();
+      const [startH, startM] = (settings.drinkReminderStart || '08:00').split(':').map(Number);
+      const [endH, endM] = (settings.drinkReminderEnd || '22:00').split(':').map(Number);
+      const startMinutes = startH * 60 + startM;
+      const endMinutes = endH * 60 + endM;
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      if (currentMinutes < startMinutes || currentMinutes > endMinutes) return;
+
+      // Sum fluid consumed in the last intervalMinutes
+      const cutoffTime = new Date(Date.now() - intervalMs).toISOString();
+      const recentLogs = hydrationLogsRef.current.filter(
+        (l) => l.timestamp >= cutoffTime
+      );
+      const recentConsumed = recentLogs.reduce((sum, l) => sum + l.amountMl, 0);
+
+      if (recentConsumed >= DRINK_THRESHOLD_ML) {
+        // User drank enough — silently reset, no notification
+        return;
+      }
+
+      // Under 400 ml — fire reminder notification
+      const remaining = Math.round(DRINK_THRESHOLD_ML - recentConsumed);
+      const body = `You've only had ${recentConsumed} ml in the last ${intervalMinutes < 60 ? `${intervalMinutes} min` : `${intervalMinutes / 60}h`}. Drink at least ${remaining} ml more! 💧`;
+
+      try {
+        const permStatus = notificationService.getPermissionStatus();
+        if (permStatus === 'granted') {
+          new Notification('💧 AquaSense X — Hydration Reminder', {
+            body,
+            icon: '/icons/icon-192x192.png',
+            tag: 'aquasense-hydration-reminder',
+          });
+        }
+      } catch {
+        // Browser notification failed — non-fatal
+      }
+
+      // Trigger hardware vibration on the physical bottle
+      const currentBottleId = bottleIdRef.current;
+      if (currentBottleId) {
+        triggerBottleVibration(currentBottleId).catch(() => {});
+      }
+    }, intervalMs);
+
+    return () => clearInterval(timerId);
+  }, [
+    user?.notificationSettings?.drinkReminders,
+    user?.notificationSettings?.drinkReminderIntervalMinutes,
+    user?.notificationSettings?.drinkReminderStart,
+    user?.notificationSettings?.drinkReminderEnd,
+  ]);
+
+  // ─── LOW BATTERY ALERT ENGINE ────────────────────────────────────────────────
+  // Fires once per session when bottle battery drops to or below 20%.
+  // Sends a browser notification + hardware vibration.
+  const lowBatteryFiredRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (!user?.notificationSettings?.lowBatteryAlerts) {
+      lowBatteryFiredRef.current = false;
+      return;
+    }
+    if (!bottle?.battery || bottle.battery > 20) {
+      lowBatteryFiredRef.current = false; // Reset so it re-fires if battery drops again
+      return;
+    }
+    if (lowBatteryFiredRef.current) return; // Already alerted this session
+
+    lowBatteryFiredRef.current = true;
+
+    // Fire browser notification
+    try {
+      const permStatus = notificationService.getPermissionStatus();
+      if (permStatus === 'granted') {
+        new Notification('🔋 AquaSense X — Low Battery', {
+          body: `Your bottle battery is at ${bottle.battery}%. Please charge your AquaSense X device soon.`,
+          icon: '/icons/icon-192x192.png',
+          tag: 'aquasense-low-battery',
+        });
+      }
+    } catch {
+      // Non-fatal
+    }
+
+    // Trigger hardware vibration on the physical bottle
+    if (bottle.bottleId) {
+      triggerBottleVibration(bottle.bottleId).catch(() => {});
+    }
+  }, [bottle?.battery, user?.notificationSettings?.lowBatteryAlerts]);
+
+  // ─── TRIGGER HARDWARE VIBRATION (manual / context-exposed) ───────────────────
+  const triggerHardwareVibration = useCallback(async () => {
+    const currentBottleId = bottle?.bottleId;
+    if (!currentBottleId) {
+      console.warn('[BottleContext] No bottle connected — cannot trigger vibration.');
+      return;
+    }
+    await triggerBottleVibration(currentBottleId);
+  }, [bottle?.bottleId]);
 
   // Fetch AI hydration tip
   const refreshAiTip = useCallback(async () => {
@@ -532,6 +659,7 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         simulateAbnormalWater,
         simulateToggleOnline,
         refreshAiTip,
+        triggerHardwareVibration,
         isMockMode: !defaultSensorProvider.isLive(),
       }}
     >

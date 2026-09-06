@@ -38,15 +38,18 @@ export interface BottleData {
   tds: number | null; // ppm
   turbidity: number | null; // NTU
   ph: number | null; // 0 - 14
-  waterLevel: number | null; // in ml, e.g. 0 - 750 ml or null when offline
-  maxCapacity?: number; // e.g. 750 ml
+  waterLevel: number | null; // ESP32 ToF percentage 0-100% (mapped to ml via maxCapacity)
+  maxCapacity?: number; // Physical bottle capacity in ml (default: 2000 ml = 2L)
   lastUpdated: string;
   lastSyncTimestamp?: string;
   isDevelopment?: boolean;
   qualityScore?: number | null;
   qualityCategory?: WaterQualityCategory | 'Offline' | 'Awaiting Connection';
   isStale?: boolean;
+  triggerVibration?: boolean; // Set true to trigger ESP32 vibration motor on PIN 14; firmware resets to false after vibrating
+  triggerVibrationAt?: any; // Firestore ServerTimestamp of when vibration was last triggered
 }
+
 
 export interface SensorReading {
   id?: string;

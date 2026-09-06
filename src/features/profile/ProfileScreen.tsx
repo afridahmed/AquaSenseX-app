@@ -444,7 +444,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
           </div>
         </div>
 
-        {/* SECTION 3: NOTIFICATIONS */}
+        {/* SECTION 3: SMART HYDRATION REMINDERS */}
         <div className="p-4 xs:p-5 sm:p-6 rounded-[28px] sm:rounded-[32px] bg-[#12161C] border border-white/5 space-y-4 shadow-xl">
           <div className="flex items-center justify-between pb-3 sm:pb-3.5 border-b border-white/5">
             <div className="flex items-center gap-2.5 sm:gap-3">
@@ -452,17 +452,24 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
                 <Bell className="w-4 h-4 text-[#00D1FF]" />
               </div>
               <div>
-                <h3 className="text-xs sm:text-sm font-semibold text-white">Smart Notifications</h3>
-                <p className="text-[11px] sm:text-xs text-neutral-400">Contextual alerts & reminders</p>
+                <h3 className="text-xs sm:text-sm font-semibold text-white">Smart Hydration Reminders</h3>
+                <p className="text-[11px] sm:text-xs text-neutral-400">Push alerts + bottle vibration · 400 ml rule</p>
               </div>
             </div>
 
-            <button
-              onClick={triggerTestNotification}
-              className="px-2.5 py-1 rounded-lg bg-[#00D1FF]/10 hover:bg-[#00D1FF]/20 text-[#00D1FF] text-xs font-medium transition-all border border-[#00D1FF]/20 touch-target sm:min-h-0 sm:min-w-0"
-            >
-              Test Alert
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Hardware vibration badge */}
+              <span className="hidden xs:flex items-center gap-1 px-2 py-0.5 rounded-lg bg-violet-500/10 border border-violet-500/25 text-violet-300 text-[10px] font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+                Vibration
+              </span>
+              <button
+                onClick={triggerTestNotification}
+                className="px-2.5 py-1 rounded-lg bg-[#00D1FF]/10 hover:bg-[#00D1FF]/20 text-[#00D1FF] text-xs font-medium transition-all border border-[#00D1FF]/20 touch-target sm:min-h-0 sm:min-w-0 cursor-pointer"
+              >
+                Test Alert
+              </button>
+            </div>
           </div>
 
           <div className="space-y-2.5 sm:space-y-3">
@@ -470,12 +477,12 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
               {
                 key: 'drinkReminders' as const,
                 title: 'Smart Drink Reminders',
-                desc: 'Prompt when hydration falls behind daily target',
+                desc: 'Reminds you to drink if < 400 ml consumed within your set interval',
               },
               {
                 key: 'lowBatteryAlerts' as const,
                 title: 'Low Bottle Battery Warning',
-                desc: 'Alert when ESP32-S3 battery drops below 20%',
+                desc: 'Push alert + bottle vibration when ESP32 battery drops below 20%',
               },
             ].map((n) => {
               const checked = !!notificationState[n.key];
@@ -513,11 +520,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
 
                   {/* Schedule Controls (Rendered when Smart Drink Reminders is enabled) */}
                   {isDrinkReminder && checked && (
-                    <div className="pt-2.5 border-t border-white/5 space-y-2.5">
+                    <div className="pt-2.5 border-t border-white/5 space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-medium text-neutral-300 flex items-center gap-1.5">
                           <Clock className="w-3.5 h-3.5 text-[#00D1FF]" />
-                          Reminder Active Window
+                          Active Reminder Window
                         </span>
                         <span className="text-[10px] text-neutral-500 font-mono">
                           {notificationState.drinkReminderStart || '08:00'} – {notificationState.drinkReminderEnd || '22:00'}
@@ -546,7 +553,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
                       </div>
 
                       <div>
-                        <label className="block text-[10px] text-neutral-400 mb-1.5">Reminder Interval</label>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-[10px] text-neutral-400">Check Interval</label>
+                          <span className="text-[10px] text-[#00D1FF] font-mono">
+                            Every {notificationState.drinkReminderIntervalMinutes < 60
+                              ? `${notificationState.drinkReminderIntervalMinutes} min`
+                              : `${notificationState.drinkReminderIntervalMinutes / 60}h`}
+                          </span>
+                        </div>
                         <div className="grid grid-cols-5 gap-1 xs:gap-1.5">
                           {[15, 30, 60, 90, 120].map((mins) => {
                             const isSelected = (notificationState.drinkReminderIntervalMinutes || 60) === mins;
@@ -555,10 +569,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
                                 key={mins}
                                 type="button"
                                 onClick={() => handleScheduleChange('drinkReminderIntervalMinutes', mins)}
-                                className={`py-1.5 px-1 rounded-xl text-center text-[11px] font-medium transition-all duration-150 border ${
+                                className={`py-1.5 px-1 rounded-xl text-center text-[11px] font-medium transition-all duration-150 border cursor-pointer ${
                                   isSelected
-                                    ? 'bg-[#00D1FF]/20 text-[#00D1FF] border-[#00D1FF]/40 shadow-sm font-semibold'
-                                    : 'bg-[#12161C] text-neutral-400 border-white/5 hover:text-white hover:bg-white/[0.04]'
+                                    ? 'bg-[#00D1FF]/20 text-[#00D1FF] border-[#00D1FF]/50 shadow-[0_0_10px_rgba(0,209,255,0.2)] font-semibold'
+                                    : 'bg-[#12161C] text-neutral-400 border-white/5 hover:text-white hover:bg-white/[0.04] hover:border-white/15'
                                 }`}
                               >
                                 {mins < 60 ? `${mins}m` : `${mins / 60}h`}
@@ -566,6 +580,20 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
                             );
                           })}
                         </div>
+                      </div>
+
+                      {/* 400 ml Rule Explainer */}
+                      <div className="flex items-start gap-2 p-2.5 rounded-xl bg-[#00D1FF]/5 border border-[#00D1FF]/15">
+                        <Droplets className="w-3.5 h-3.5 text-[#00D1FF] shrink-0 mt-0.5" />
+                        <p className="text-[10px] text-neutral-300 leading-relaxed">
+                          <span className="text-[#00D1FF] font-semibold">400 ml Rule:</span> Reminder only fires if you've consumed fewer than 400 ml within the interval. Drinking more silently resets the timer — no unnecessary interruptions.
+                        </p>
+                      </div>
+
+                      {/* Hardware vibration note */}
+                      <div className="flex items-center gap-2 text-[10px] text-neutral-500 font-mono">
+                        <span className="w-1.5 h-1.5 rounded-full bg-violet-400/70" />
+                        Reminder also triggers bottle motor vibration (PIN 14)
                       </div>
                     </div>
                   )}
