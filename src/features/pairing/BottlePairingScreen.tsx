@@ -199,7 +199,7 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
         {/* Descriptive Subtext with Adaptive Typography */}
         <div className="text-center mb-4 sm:mb-6">
           <p className="text-xs sm:text-sm text-neutral-400 max-w-sm mx-auto leading-relaxed">
-            Enter the bottle ID (e.g. <span className="font-mono text-neutral-300">ASX-PROD-01</span>) laser-engraved under the silicone base of your AquaSense X bottle.
+            Enter the bottle ID (e.g. <span className="font-mono text-neutral-300">ASX-PROD-01</span>)
           </p>
         </div>
 
