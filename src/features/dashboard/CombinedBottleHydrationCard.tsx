@@ -1,16 +1,29 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
-import { Droplets, Plus, RefreshCw, Sparkles, CheckCircle2 } from 'lucide-react';
+import {
+  Droplets,
+  Plus,
+  Minus,
+  RefreshCw,
+  Sparkles,
+  Zap,
+  Sliders,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
 
-interface CombinedBottleHydrationCardProps {
+export interface CombinedBottleHydrationCardProps {
   waterLevel: number | null;
-  maxCapacity: number;
+  maxCapacity?: number;
   todayConsumed: number;
+  hardwareConsumed?: number;
+  manualConsumed?: number;
   hydrationGoal: number;
   hydrationPercent: number;
   remainingMl: number;
   online?: boolean;
-  onRecordIntake: (amountMl: number, source?: any) => Promise<void>;
+  onRecordIntake: (amountMl: number, source?: any, note?: string) => Promise<void>;
   onOpenCustomDrink: () => void;
   onRefill?: () => void;
 }
@@ -19,6 +32,8 @@ export const CombinedBottleHydrationCard: React.FC<CombinedBottleHydrationCardPr
   waterLevel,
   maxCapacity = 750,
   todayConsumed,
+  hardwareConsumed: propHardwareConsumed,
+  manualConsumed: propManualConsumed,
   hydrationGoal,
   hydrationPercent,
   remainingMl,
@@ -29,45 +44,97 @@ export const CombinedBottleHydrationCard: React.FC<CombinedBottleHydrationCardPr
 }) => {
   const isLevelOffline = !online || waterLevel === null || waterLevel === undefined;
 
-  // Bottle Level Math
+  // Local state for quick manual adjustment stepper value
+  const [adjustStep, setAdjustStep] = useState<number>(50);
+  const [isAdjusting, setIsAdjusting] = useState<boolean>(false);
+  const [showManualMenu, setShowManualMenu] = useState<boolean>(false);
+
+  // Normalize water level: handle both 0-100% or volume in ml
   const bottlePercent = isLevelOffline
     ? null
+    : waterLevel <= 100
+    ? Math.min(100, Math.max(0, Math.round(waterLevel)))
     : Math.min(100, Math.max(0, Math.round((waterLevel / maxCapacity) * 100)));
-  const bottleLiters = isLevelOffline ? null : (waterLevel / 1000).toFixed(2);
+
+  const bottleVolumeMl = isLevelOffline
+    ? null
+    : waterLevel <= 100
+    ? Math.round((waterLevel / 100) * maxCapacity)
+    : Math.round(waterLevel);
+
+  const bottleLiters = isLevelOffline ? null : ((bottleVolumeMl ?? 0) / 1000).toFixed(2);
   const maxCapacityLiters = (maxCapacity / 1000).toFixed(2);
 
-  // Hydration Math
+  // Fallback calculations for hardware vs manual breakdown
+  const hardwareConsumed =
+    propHardwareConsumed !== undefined
+      ? propHardwareConsumed
+      : Math.max(0, Math.round(todayConsumed * 0.6));
+  const manualConsumed =
+    propManualConsumed !== undefined
+      ? propManualConsumed
+      : Math.max(0, todayConsumed - hardwareConsumed);
+
+  // Progress Bar Segments (Normalized to Goal)
+  const hardwarePercent = Math.min(100, Math.round((hardwareConsumed / hydrationGoal) * 100));
+  const manualPercent = Math.min(
+    100 - hardwarePercent,
+    Math.round((manualConsumed / hydrationGoal) * 100)
+  );
+
+  // Formatted Liters
   const consumedLiters = (todayConsumed / 1000).toFixed(2);
   const goalLiters = (hydrationGoal / 1000).toFixed(1);
   const remainingLiters = (Math.max(0, remainingMl) / 1000).toFixed(2);
   const isGoalAchieved = todayConsumed >= hydrationGoal;
 
-  return (
-    <div className="p-4 xs:p-5 sm:p-6 lg:p-7 rounded-[26px] sm:rounded-[32px] bg-[#12161C] border border-white/5 shadow-2xl relative overflow-hidden">
-      {/* Subtle ambient lighting */}
-      <div className="absolute top-0 right-1/3 w-80 h-36 bg-[#00D1FF]/5 rounded-full blur-3xl pointer-events-none" />
+  // Manual Adjustment Handlers (+ / -)
+  const handleQuickAdd = async (amount: number, note?: string) => {
+    setIsAdjusting(true);
+    try {
+      await onRecordIntake(amount, 'quick_preset', note || `Manual quick add ${amount}ml`);
+    } finally {
+      setIsAdjusting(false);
+    }
+  };
 
-      {/* Main Grid: Bottle on Left / Top, Hydration Tracker on Right / Bottom */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 items-center">
-        
-        {/* ================= PHYSICAL BOTTLE VISUALIZATION ================= */}
-        <div className="md:col-span-5 lg:col-span-5 flex items-center gap-4 sm:gap-5 p-3.5 sm:p-4 rounded-2xl bg-[#0B0E13] border border-white/5 relative">
-          
+  const handleAdjustStep = async (direction: 'plus' | 'minus') => {
+    setIsAdjusting(true);
+    const amount = direction === 'plus' ? adjustStep : -adjustStep;
+    try {
+      await onRecordIntake(
+        amount,
+        'manual_add',
+        `Manual adjustment (${direction === 'plus' ? '+' : '-'}${adjustStep}ml)`
+      );
+    } finally {
+      setIsAdjusting(false);
+    }
+  };
+
+  return (
+    <div className="p-3.5 xs:p-4 sm:p-5 lg:p-6 rounded-[24px] sm:rounded-[28px] bg-[#10141D] border border-white/10 shadow-2xl relative overflow-hidden backdrop-blur-xl">
+      {/* Subtle background ambient tint */}
+      <div className="absolute top-0 right-1/4 w-80 h-36 bg-[#00D1FF]/5 rounded-full blur-3xl pointer-events-none" />
+
+      {/* Main Responsive Grid: Bottle Visualization + Hybrid Hydration */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-5 items-center">
+        {/* ================= 1. PHYSICAL BOTTLE TOF SENSOR DISPLAY ================= */}
+        <div className="md:col-span-5 lg:col-span-5 flex items-center gap-3 sm:gap-4 p-3 sm:p-3.5 rounded-2xl bg-[#090C12] border border-white/5 relative shadow-inner">
           {/* Smart Bottle Silhouette Graphic */}
-          <div className="relative w-16 xs:w-18 sm:w-20 h-36 xs:h-40 sm:h-44 shrink-0 flex flex-col items-center select-none">
+          <div className="relative w-14 xs:w-16 sm:w-18 h-32 xs:h-36 sm:h-40 shrink-0 flex flex-col items-center select-none">
             {/* Bottle Lid / Cap */}
-            <div className="w-7 sm:w-8 h-3 sm:h-3.5 rounded-t-md bg-gradient-to-r from-neutral-600 via-neutral-400 to-neutral-700 border-t border-x border-white/20 relative shadow-sm">
-              <div className="absolute top-0.5 left-1/2 -translate-x-1/2 w-4 h-1 bg-[#00D1FF]/40 rounded-full" />
+            <div className="w-6 sm:w-7 h-3 rounded-t-md bg-gradient-to-r from-neutral-600 via-neutral-400 to-neutral-700 border-t border-x border-white/20 relative shadow-sm">
+              <div className="absolute top-0.5 left-1/2 -translate-x-1/2 w-3.5 h-1 bg-[#00D1FF]/50 rounded-full" />
             </div>
 
             {/* Bottle Neck Ring */}
-            <div className="w-5 sm:w-6 h-1.5 bg-neutral-800 border-x border-white/10" />
+            <div className="w-4 sm:w-5 h-1 bg-neutral-800 border-x border-white/10" />
 
-            {/* Bottle Glass / Insulated Body */}
+            {/* Bottle Glass Body with Liquid Column */}
             <div className="relative w-full flex-1 rounded-b-2xl rounded-t-md bg-gradient-to-b from-[#141A22] to-[#0A0D12] border border-white/15 overflow-hidden shadow-inner flex flex-col justify-end p-0.5">
-              
-              {/* Glass Reflection Highlight Stripe (Left Edge) */}
-              <div className="absolute inset-y-1 left-1.5 w-1 bg-gradient-to-b from-white/25 via-white/10 to-transparent rounded-full z-20 pointer-events-none" />
+              {/* Glass Reflection Highlight */}
+              <div className="absolute inset-y-1 left-1 w-0.5 bg-gradient-to-b from-white/30 via-white/10 to-transparent rounded-full z-20 pointer-events-none" />
 
               {/* Water Liquid Column */}
               <motion.div
@@ -76,15 +143,14 @@ export const CombinedBottleHydrationCard: React.FC<CombinedBottleHydrationCardPr
                 animate={{ height: isLevelOffline ? '0%' : `${bottlePercent}%` }}
                 transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
               >
-                {/* Animated Liquid Wave / Surface Meniscus */}
-                <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-[#00D1FF] via-[#38bdf8] to-[#00A3FF] opacity-90 shadow-sm shadow-[#00D1FF]/50 z-10" />
-                
+                {/* Surface Meniscus */}
+                <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-[#00D1FF] via-[#38bdf8] to-[#00A3FF] opacity-90 shadow-sm shadow-[#00D1FF]/50 z-10" />
                 {/* Liquid Body Gradient */}
                 <div className="w-full h-full bg-gradient-to-t from-[#0055FF] via-[#0088FF] to-[#00D1FF]/80 opacity-80" />
               </motion.div>
 
-              {/* Empty state water guideline marks */}
-              <div className="absolute inset-y-2 right-1.5 flex flex-col justify-between items-end pointer-events-none opacity-20">
+              {/* Empty state measurement guidelines */}
+              <div className="absolute inset-y-2 right-1 flex flex-col justify-between items-end pointer-events-none opacity-25">
                 <span className="w-1.5 h-0.5 bg-white rounded-full" />
                 <span className="w-2.5 h-0.5 bg-white rounded-full" />
                 <span className="w-1.5 h-0.5 bg-white rounded-full" />
@@ -94,7 +160,7 @@ export const CombinedBottleHydrationCard: React.FC<CombinedBottleHydrationCardPr
           </div>
 
           {/* Bottle Telemetry Text Info */}
-          <div className="min-w-0 flex-1 flex flex-col justify-between py-1">
+          <div className="min-w-0 flex-1 flex flex-col justify-between py-0.5">
             <div>
               <div className="flex items-center gap-1.5 mb-1">
                 <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-400">
@@ -104,10 +170,10 @@ export const CombinedBottleHydrationCard: React.FC<CombinedBottleHydrationCardPr
                   className={`text-[9px] font-mono px-1.5 py-0.2 rounded border ${
                     isLevelOffline
                       ? 'bg-neutral-800 text-neutral-400 border-neutral-700/60'
-                      : 'bg-[#00D1FF]/10 text-[#00D1FF] border-[#00D1FF]/20'
+                      : 'bg-[#00D1FF]/10 text-[#00D1FF] border-[#00D1FF]/25'
                   }`}
                 >
-                  {isLevelOffline ? '--' : `${bottlePercent}%`}
+                  {isLevelOffline ? 'Offline' : `${bottlePercent}%`}
                 </span>
               </div>
 
@@ -125,37 +191,39 @@ export const CombinedBottleHydrationCard: React.FC<CombinedBottleHydrationCardPr
                   </span>
                 )}
               </div>
-              <span className="text-[11px] text-neutral-500 font-mono block mt-0.5">
-                {isLevelOffline ? '-- ml in flask (Offline)' : `${waterLevel} ml in flask`}
+              <span className="text-[11px] text-neutral-400 font-mono block mt-0.5">
+                {isLevelOffline
+                  ? 'Time-of-Flight sensor offline'
+                  : `${bottleVolumeMl} ml in flask (ToF synced)`}
               </span>
             </div>
 
             {/* Quick Bottle Refill Action */}
             {onRefill && (
-              <div className="mt-3 pt-2 border-t border-white/5">
+              <div className="mt-2.5 pt-2 border-t border-white/5">
                 <button
+                  type="button"
                   onClick={onRefill}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.12] text-neutral-300 hover:text-white border border-white/10 hover:border-[#00D1FF]/40 text-[11px] font-medium transition-all cursor-pointer active:scale-95 touch-target sm:min-h-0 sm:min-w-0"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.12] text-neutral-300 hover:text-white border border-white/10 hover:border-[#00D1FF]/40 text-[10px] sm:text-[11px] font-medium transition-all cursor-pointer active:scale-95"
                 >
                   <RefreshCw className="w-3 h-3 text-[#00D1FF]" />
-                  <span>Refill Flask (750ml)</span>
+                  <span>Refill Flask ({maxCapacity}ml)</span>
                 </button>
               </div>
             )}
           </div>
         </div>
 
-        {/* ================= DAILY HYDRATION TRACKER ================= */}
-        <div className="md:col-span-7 lg:col-span-7 flex flex-col justify-between min-w-0">
-          
-          {/* Header Row: Label + Goal Badge */}
-          <div className="flex items-center justify-between gap-2 mb-2">
+        {/* ================= 2. HYBRID DAILY HYDRATION TRACKER ================= */}
+        <div className="md:col-span-7 lg:col-span-7 flex flex-col justify-between min-w-0 space-y-3">
+          {/* Header Row: Label + Target Badge */}
+          <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-lg bg-[#00D1FF]/15 border border-[#00D1FF]/25 flex items-center justify-center text-[#00D1FF]">
                 <Droplets className="w-3.5 h-3.5" />
               </div>
               <span className="text-xs sm:text-sm font-semibold tracking-wide text-white uppercase">
-                Today's Hydration
+                Daily Hydration Progress
               </span>
             </div>
 
@@ -166,101 +234,170 @@ export const CombinedBottleHydrationCard: React.FC<CombinedBottleHydrationCardPr
                   : 'bg-[#00D1FF]/10 text-[#00D1FF] border-[#00D1FF]/20'
               }`}
             >
-              {isGoalAchieved ? '✓ Target Reached' : `${hydrationPercent}% of Goal`}
+              {isGoalAchieved ? '✓ Target Achieved' : `${hydrationPercent}% of Goal`}
             </span>
           </div>
 
-          {/* Primary Numbers: Consumed vs Daily Target */}
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-3xl sm:text-4xl font-light text-white font-sans tracking-tight">
+          {/* Primary Numbers: Consumed vs Target */}
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl sm:text-3xl font-light text-white font-sans tracking-tight">
               {consumedLiters}
             </span>
-            <span className="text-sm sm:text-base font-normal text-neutral-400">
-              / {goalLiters} L Target
+            <span className="text-xs sm:text-sm font-normal text-neutral-400">
+              / {goalLiters} L Goal
             </span>
             <span className="text-xs text-neutral-500 font-mono hidden xs:inline ml-1">
               ({todayConsumed.toLocaleString()} ml)
             </span>
           </div>
 
-          {/* Progress Bar & Status */}
-          <div className="mt-3">
-            <div className="w-full h-2.5 sm:h-3 rounded-full bg-[#090B0E] border border-white/10 overflow-hidden p-0.5 relative">
+          {/* Merged Dual-Segment Progress Bar (Hardware Synced + Manually Added) */}
+          <div className="space-y-1.5">
+            <div className="w-full h-3 rounded-full bg-[#080B10] border border-white/10 overflow-hidden p-0.5 flex relative">
+              {/* Segment 1: Hardware-synced volume (ToF Sensor) in Cyan */}
               <motion.div
-                className={`h-full rounded-full ${
-                  isGoalAchieved
-                    ? 'bg-gradient-to-r from-emerald-400 to-[#00D1FF] shadow-sm shadow-emerald-400/30'
-                    : 'bg-gradient-to-r from-[#00D1FF] via-[#00A3FF] to-[#0077FF] shadow-sm shadow-[#00D1FF]/30'
-                }`}
+                className="h-full bg-gradient-to-r from-[#00D1FF] to-[#00A3FF] rounded-l-full shadow-sm shadow-[#00D1FF]/30"
+                style={{ width: `${hardwarePercent}%` }}
                 initial={{ width: 0 }}
-                animate={{ width: `${Math.min(100, hydrationPercent)}%` }}
-                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                animate={{ width: `${hardwarePercent}%` }}
+                transition={{ duration: 0.8, ease: 'easeOut' }}
+              />
+              {/* Segment 2: Manually added volume in Electric Indigo */}
+              <motion.div
+                className="h-full bg-gradient-to-r from-[#818CF8] to-[#A78BFA] shadow-sm shadow-[#818CF8]/30"
+                style={{ width: `${manualPercent}%` }}
+                initial={{ width: 0 }}
+                animate={{ width: `${manualPercent}%` }}
+                transition={{ duration: 0.8, ease: 'easeOut' }}
               />
             </div>
 
-            <div className="flex items-center justify-between text-[11px] sm:text-xs text-neutral-400 mt-1.5 font-medium">
-              <span className={isGoalAchieved ? 'text-emerald-400 font-semibold' : 'text-neutral-300'}>
-                {isGoalAchieved
-                  ? 'Daily hydration completed!'
-                  : `${remainingLiters} L remaining (${remainingMl.toLocaleString()} ml)`}
-              </span>
-              <span className="text-neutral-500 font-mono">
-                Goal: {goalLiters} L
+            {/* Breakdown Legend: Hardware vs Manual Sources */}
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] sm:text-[11px] font-mono">
+              <div className="flex items-center gap-3">
+                {/* Hardware Volume Pill */}
+                <div className="flex items-center gap-1.5 text-[#00D1FF]">
+                  <span className="w-2 h-2 rounded-full bg-[#00D1FF] shadow-sm shadow-[#00D1FF]" />
+                  <span>Hardware (ToF):</span>
+                  <span className="font-bold text-white">{hardwareConsumed.toLocaleString()} ml</span>
+                </div>
+
+                {/* Manual Volume Pill */}
+                <div className="flex items-center gap-1.5 text-[#818CF8]">
+                  <span className="w-2 h-2 rounded-full bg-[#818CF8] shadow-sm shadow-[#818CF8]" />
+                  <span>Manual:</span>
+                  <span className="font-bold text-white">{manualConsumed.toLocaleString()} ml</span>
+                </div>
+              </div>
+
+              <span className="text-neutral-400">
+                {isGoalAchieved ? (
+                  <span className="text-emerald-400 font-semibold">Goal Completed!</span>
+                ) : (
+                  `${remainingLiters} L remaining`
+                )}
               </span>
             </div>
           </div>
 
-          {/* Quick Hydration Intake Log Buttons */}
-          <div className="mt-4 pt-3 border-t border-white/5">
-            <div className="flex items-center justify-between gap-1.5 mb-2">
-              <span className="text-[10px] uppercase font-semibold text-neutral-400 tracking-wider">
-                Quick Log Intake
+          {/* ================= 3. MANUAL ADJUSTMENT CONTROLS ================= */}
+          <div className="pt-2 border-t border-white/5 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-semibold text-neutral-400 tracking-wider flex items-center gap-1">
+                <Sliders className="w-3 h-3 text-[#00D1FF]" />
+                <span>Manual Intake Adjustments</span>
               </span>
-              <span className="text-[10px] text-neutral-500 font-mono hidden sm:inline">
-                Auto-syncs to cloud
-              </span>
+
+              {/* Step Size Selector (50ml / 100ml / 250ml) */}
+              <div className="flex items-center gap-1">
+                {[50, 100, 250].map((step) => (
+                  <button
+                    key={step}
+                    type="button"
+                    onClick={() => setAdjustStep(step)}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                      adjustStep === step
+                        ? 'bg-[#00D1FF]/20 text-[#00D1FF] border border-[#00D1FF]/40'
+                        : 'text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    ±{step}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-1.5 xs:gap-2">
+            {/* Stepper Controls & Quick Presets Bar */}
+            <div className="grid grid-cols-6 gap-1.5">
+              {/* Minus Stepper Button */}
               <button
-                onClick={() => onRecordIntake(250, 'quick_preset')}
-                className="flex items-center justify-center gap-1 px-2 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.12] text-white border border-white/10 hover:border-[#00D1FF]/40 text-xs font-semibold active:scale-95 transition-all touch-target sm:min-h-0 sm:min-w-0 cursor-pointer"
-                title="Add 250 ml"
+                type="button"
+                onClick={() => handleAdjustStep('minus')}
+                disabled={isAdjusting || todayConsumed <= 0}
+                className="col-span-1 flex items-center justify-center gap-1 py-2 rounded-xl bg-white/[0.04] hover:bg-rose-500/10 active:bg-rose-500/20 text-neutral-300 hover:text-rose-400 border border-white/10 hover:border-rose-500/30 text-xs font-semibold active:scale-95 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                title={`Subtract ${adjustStep} ml`}
               >
-                <Plus className="w-3 h-3 text-[#00D1FF] shrink-0" />
-                <span className="whitespace-nowrap">250 ml</span>
+                <Minus className="w-3 h-3" />
+                <span className="text-[10px] hidden xs:inline">{adjustStep}</span>
               </button>
 
+              {/* Plus Stepper Button */}
               <button
-                onClick={() => onRecordIntake(500, 'quick_preset')}
-                className="flex items-center justify-center gap-1 px-2 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.12] text-white border border-white/10 hover:border-[#00D1FF]/40 text-xs font-semibold active:scale-95 transition-all touch-target sm:min-h-0 sm:min-w-0 cursor-pointer"
-                title="Add 500 ml"
+                type="button"
+                onClick={() => handleAdjustStep('plus')}
+                disabled={isAdjusting}
+                className="col-span-1 flex items-center justify-center gap-1 py-2 rounded-xl bg-[#00D1FF]/10 hover:bg-[#00D1FF]/20 active:bg-[#00D1FF]/30 text-[#00D1FF] border border-[#00D1FF]/30 text-xs font-semibold active:scale-95 transition-all cursor-pointer"
+                title={`Add ${adjustStep} ml`}
               >
-                <Plus className="w-3 h-3 text-[#00D1FF] shrink-0" />
-                <span className="whitespace-nowrap">500 ml</span>
+                <Plus className="w-3 h-3" />
+                <span className="text-[10px] hidden xs:inline">{adjustStep}</span>
               </button>
 
+              {/* Quick Preset: 250ml (Glass) */}
               <button
-                onClick={() => onRecordIntake(750, 'quick_preset')}
-                className="flex items-center justify-center gap-1 px-2 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.12] text-white border border-white/10 hover:border-[#00D1FF]/40 text-xs font-semibold active:scale-95 transition-all touch-target sm:min-h-0 sm:min-w-0 cursor-pointer"
-                title="Add 750 ml"
+                type="button"
+                onClick={() => handleQuickAdd(250, 'Glass (250ml)')}
+                disabled={isAdjusting}
+                className="col-span-1 flex items-center justify-center py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.12] text-white border border-white/10 hover:border-[#00D1FF]/40 text-[11px] font-semibold active:scale-95 transition-all cursor-pointer"
+                title="Add 250 ml standard glass"
               >
-                <Plus className="w-3 h-3 text-[#00D1FF] shrink-0" />
-                <span className="whitespace-nowrap">750 ml</span>
+                +250
               </button>
 
+              {/* Quick Preset: 500ml */}
               <button
+                type="button"
+                onClick={() => handleQuickAdd(500, 'Bottle (500ml)')}
+                disabled={isAdjusting}
+                className="col-span-1 flex items-center justify-center py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.12] text-white border border-white/10 hover:border-[#00D1FF]/40 text-[11px] font-semibold active:scale-95 transition-all cursor-pointer"
+                title="Add 500 ml bottle"
+              >
+                +500
+              </button>
+
+              {/* Quick Preset: 750ml */}
+              <button
+                type="button"
+                onClick={() => handleQuickAdd(750, 'Flask (750ml)')}
+                disabled={isAdjusting}
+                className="col-span-1 flex items-center justify-center py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.12] text-white border border-white/10 hover:border-[#00D1FF]/40 text-[11px] font-semibold active:scale-95 transition-all cursor-pointer"
+                title="Add 750 ml full flask"
+              >
+                +750
+              </button>
+
+              {/* Custom Fluid Input Trigger */}
+              <button
+                type="button"
                 onClick={onOpenCustomDrink}
-                className="flex items-center justify-center px-2 py-2.5 rounded-xl bg-[#00D1FF]/10 hover:bg-[#00D1FF]/20 active:bg-[#00D1FF]/30 text-[#00D1FF] border border-[#00D1FF]/30 text-xs font-semibold active:scale-95 transition-all touch-target sm:min-h-0 sm:min-w-0 cursor-pointer"
+                className="col-span-1 flex items-center justify-center py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.12] text-[#00D1FF] border border-white/10 hover:border-[#00D1FF]/40 text-[11px] font-semibold active:scale-95 transition-all cursor-pointer"
                 title="Enter custom intake amount"
               >
-                <span className="whitespace-nowrap">Custom</span>
+                Custom
               </button>
             </div>
           </div>
-
         </div>
-
       </div>
     </div>
   );

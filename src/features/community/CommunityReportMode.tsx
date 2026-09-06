@@ -717,6 +717,7 @@ export const CommunityReportMode: React.FC<CommunityReportModeProps> = ({
                     scanProgress={scanProgress}
                     remainingSeconds={Math.max(1, Math.ceil(15 - (scanProgress / 100) * 15))}
                     packetCount={readingBuffer.length}
+                    readingBuffer={readingBuffer}
                     currentPh={bottle?.ph}
                     currentTds={bottle?.tds}
                     currentTurbidity={bottle?.turbidity}

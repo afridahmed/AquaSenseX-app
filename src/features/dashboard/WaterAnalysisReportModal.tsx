@@ -10,27 +10,22 @@ import { geocodingService } from '../../services/geocoding/geocodingService';
 import { createCommunityReport } from '../../services/community/communityService';
 import { CommunityReport } from '../../types';
 import {
-  FlaskConical,
   MapPin,
   CheckCircle2,
   AlertTriangle,
   X,
   Share2,
   Loader2,
-  Navigation,
   Copy,
   Check,
   RotateCw,
-  Sparkles,
   ShieldCheck,
   FileText,
-  WifiOff,
   Droplets,
   Thermometer,
   Eye,
   Activity,
-  ChevronDown,
-  ChevronUp,
+  Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AnalysisResult } from './TestWaterActionCard';
@@ -50,10 +45,11 @@ export const WaterAnalysisReportModal: React.FC<WaterAnalysisReportModalProps> =
   bottleId: propBottleId,
   onSuccessPublish,
 }) => {
-  const { bottle, isDeviceOnline, qualityEval } = useBottle();
+  const { bottle, qualityEval } = useBottle();
   const { user } = useAuth();
 
-  const activeBottleId = propBottleId || bottle?.bottleId || user?.assignedBottleId || user?.bottleId || 'AquaSense X';
+  const activeBottleId =
+    propBottleId || bottle?.bottleId || user?.assignedBottleId || user?.bottleId || 'AquaSense X';
 
   // Extract average values or fallback to current bottle telemetry
   const avgPh = analysisResult?.ph ?? bottle?.ph ?? null;
@@ -65,8 +61,7 @@ export const WaterAnalysisReportModal: React.FC<WaterAnalysisReportModalProps> =
   const sampleCount = analysisResult?.sampleCount ?? 1;
   const timestamp = analysisResult?.timestamp ?? new Date().toLocaleTimeString();
 
-  // Local state
-  const [shareToCommunity, setShareToCommunity] = useState<boolean>(true);
+  // Form State (Sharing is strictly enforced)
   const [sourceName, setSourceName] = useState<string>('');
   const [sourceType, setSourceType] = useState<CommunityReport['sourceType']>('fountain');
   const [notes, setNotes] = useState<string>('');
@@ -97,9 +92,7 @@ export const WaterAnalysisReportModal: React.FC<WaterAnalysisReportModalProps> =
       setSubmitSuccess(false);
       setIsSubmitting(false);
       setCopied(false);
-      if (shareToCommunity) {
-        acquireFreshLocation();
-      }
+      acquireFreshLocation();
     } else {
       setLocStatus('idle');
       setLocError(null);
@@ -107,13 +100,6 @@ export const WaterAnalysisReportModal: React.FC<WaterAnalysisReportModalProps> =
       setReportCoords(null);
     }
   }, [isOpen]);
-
-  // Acquire location when community share toggle is enabled
-  useEffect(() => {
-    if (isOpen && shareToCommunity && locStatus === 'idle') {
-      acquireFreshLocation();
-    }
-  }, [shareToCommunity, isOpen]);
 
   const acquireFreshLocation = async () => {
     setLocStatus('acquiring');
@@ -159,11 +145,11 @@ export const WaterAnalysisReportModal: React.FC<WaterAnalysisReportModalProps> =
       if (err instanceof LocationError) {
         setLocError(
           err.code === LocationErrorCode.PERMISSION_DENIED
-            ? 'Location access was denied. Enable location permissions in your browser to share to the map.'
-            : 'Unable to retrieve accurate GPS location. Tap Retry.'
+            ? 'Location access was denied. Enable location in your browser to publish to the community map.'
+            : 'Unable to retrieve accurate GPS coordinates. Tap Refresh.'
         );
       } else {
-        setLocError('GPS signal unavailable. Please ensure location is enabled.');
+        setLocError('GPS signal unavailable. Please ensure location services are enabled.');
       }
     }
   };
@@ -192,16 +178,16 @@ Overall Score: ${qualityScore}/100 (${qualityCategory})
   };
 
   // Submit to community map
-  const handlePublishToCommunity = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePublishToCommunity = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
 
     if (!user) {
-      setLocError('User authentication required to submit community reports.');
+      setLocError('Sign in to publish water reports to the community map.');
       return;
     }
 
     if (!reportCoords || !deviceGps) {
-      setLocError('Valid GPS coordinates required to pin report to the Community Map.');
+      setLocError('Acquiring valid GPS coordinates is required to publish to the community map.');
       return;
     }
 
@@ -237,7 +223,7 @@ Overall Score: ${qualityScore}/100 (${qualityCategory})
           onSuccessPublish(newReport);
         }
         onClose();
-      }, 1500);
+      }, 1200);
     } catch (err: any) {
       console.error('Community publish failed:', err);
       setLocError(err.message || 'Failed to publish to Community Map. Please retry.');
@@ -250,31 +236,31 @@ Overall Score: ${qualityScore}/100 (${qualityCategory})
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
         <motion.div
           initial={{ opacity: 0, y: 24, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 24, scale: 0.98 }}
-          transition={{ duration: 0.2, ease: 'easeOut' }}
-          className="w-full sm:max-w-xl bg-[#10151D] border-t sm:border border-white/10 rounded-t-[28px] sm:rounded-[32px] p-4 xs:p-5 sm:p-6 shadow-2xl relative my-auto max-h-[92vh] flex flex-col"
+          transition={{ duration: 0.22, ease: 'easeOut' }}
+          className="w-full sm:max-w-lg bg-[#0C1017]/95 backdrop-blur-2xl border-t sm:border border-white/10 rounded-t-[24px] sm:rounded-[28px] p-4 sm:p-5 shadow-2xl relative my-auto max-h-[92vh] flex flex-col"
         >
-          {/* Header */}
-          <div className="flex items-center justify-between pb-3.5 border-b border-white/10 shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-[#00D1FF]/15 border border-[#00D1FF]/30 text-[#00D1FF] flex items-center justify-center shrink-0">
-                <FileText className="w-5 h-5 text-[#00D1FF]" />
+          {/* 1. Header with Title & Close Button */}
+          <div className="flex items-center justify-between pb-3 border-b border-white/10 shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-[#00D1FF]/15 border border-[#00D1FF]/30 text-[#00D1FF] flex items-center justify-center shrink-0">
+                <FileText className="w-4 h-4 text-[#00D1FF]" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                    Water Quality Report
+                  <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
+                    Water Quality Analysis
                   </h3>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#00D1FF]/10 text-[#00D1FF] border border-[#00D1FF]/20">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#00D1FF]/10 text-[#00D1FF] border border-[#00D1FF]/25">
                     Verified
                   </span>
                 </div>
-                <p className="text-xs text-neutral-400 font-mono">
-                  15s Stabilized Average · {timestamp}
+                <p className="text-[11px] text-neutral-400 font-mono">
+                  15s Stabilized · {timestamp}
                 </p>
               </div>
             </div>
@@ -285,27 +271,27 @@ Overall Score: ${qualityScore}/100 (${qualityCategory})
               onClick={onClose}
               className="p-1.5 rounded-xl text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Scrollable Modal Content */}
-          <div className="overflow-y-auto pr-1 -mr-1 space-y-3.5 pt-3.5 flex-1">
-            {/* 1. Quality Score & Assessment Banner (derived strictly from averages) */}
-            <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-[#141B24] via-[#12161C] to-[#0D1117] border border-white/10 shadow-lg relative overflow-hidden">
+          {/* 2. Scrollable Modal Body */}
+          <div className="overflow-y-auto pr-0.5 space-y-3 pt-3 flex-1">
+            {/* Quality Score & Status Banner */}
+            <div className="p-3 sm:p-3.5 rounded-2xl bg-gradient-to-r from-[#141B24] via-[#10151C] to-[#0A0E14] border border-white/10 shadow-lg relative overflow-hidden">
               <div className="flex items-center justify-between gap-3 relative z-10">
                 <div>
-                  <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-400 block mb-1">
-                    Average-Derived Quality Score
+                  <span className="text-[9px] uppercase font-mono tracking-wider text-neutral-400 block mb-0.5">
+                    Water Purity Score
                   </span>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl sm:text-4xl font-extrabold text-white font-sans tracking-tight">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl sm:text-3xl font-extrabold text-white font-sans tracking-tight">
                       {qualityScore !== null ? qualityScore : '--'}
                     </span>
-                    <span className="text-xs sm:text-sm text-neutral-400 font-mono">/100</span>
+                    <span className="text-xs text-neutral-400 font-mono">/100</span>
                     {qualityCategory && (
                       <span
-                        className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${
+                        className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
                           (qualityScore ?? 0) >= 88
                             ? 'bg-[#00D1FF]/15 text-[#00D1FF] border-[#00D1FF]/30'
                             : (qualityScore ?? 0) >= 70
@@ -319,295 +305,242 @@ Overall Score: ${qualityScore}/100 (${qualityCategory})
                   </div>
                 </div>
 
-                <div className="w-12 h-12 rounded-2xl bg-[#00D1FF]/10 border border-[#00D1FF]/25 text-[#00D1FF] flex items-center justify-center shrink-0">
-                  <ShieldCheck className="w-6 h-6 text-[#00D1FF]" />
+                <div className="w-10 h-10 rounded-xl bg-[#00D1FF]/10 border border-[#00D1FF]/25 text-[#00D1FF] flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-5 h-5 text-[#00D1FF]" />
                 </div>
               </div>
 
-              <p className="text-xs text-neutral-300 mt-2.5 leading-relaxed relative z-10">
+              <p className="text-[11px] text-neutral-300 mt-2 leading-relaxed relative z-10">
                 {(qualityScore ?? 0) >= 88
-                  ? 'Optimal drinking water standard. Electrochemical and optical purity metrics are well within clean hydration boundaries.'
+                  ? 'Optimal drinking water quality. Telemetry stabilized across optical and electrochemical sensors.'
                   : (qualityScore ?? 0) >= 70
-                  ? 'Good water purity. Minor TDS or mineral variance detected, safe for general daily consumption.'
-                  : 'Caution advised. Elevated mineral density or optical turbidity detected. Filtration recommended.'}
+                  ? 'Good water purity. Minor mineral variation detected, safe for regular consumption.'
+                  : 'Filtration recommended due to elevated mineral density or turbidity.'}
               </p>
             </div>
 
-            {/* 2. Verified Averages 4-Metric Responsive Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5">
+            {/* 4-Metric Compact Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {/* Avg pH */}
-              <div className="p-2.5 sm:p-3 rounded-2xl bg-white/[0.03] border border-white/5 flex flex-col justify-between">
-                <div className="flex items-center justify-between text-neutral-400 mb-1">
-                  <span className="text-[10px] font-mono uppercase">Avg pH</span>
-                  <Activity className="w-3.5 h-3.5 text-[#00D1FF]" />
+              <div className="p-2 sm:p-2.5 rounded-xl bg-white/[0.03] border border-white/5 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-neutral-400 mb-0.5">
+                  <span className="text-[9px] font-mono uppercase">Avg pH</span>
+                  <Activity className="w-3 h-3 text-[#00D1FF]" />
                 </div>
-                <div className="text-base sm:text-lg font-bold text-white font-mono">
+                <div className="text-sm sm:text-base font-bold text-white font-mono">
                   {avgPh !== null ? avgPh : '--'}
                 </div>
-                <span className="text-[9px] text-neutral-400 mt-0.5">Ideal: 6.5 – 8.5</span>
+                <span className="text-[8px] text-neutral-400">6.5–8.5 ideal</span>
               </div>
 
               {/* Avg TDS */}
-              <div className="p-2.5 sm:p-3 rounded-2xl bg-white/[0.03] border border-white/5 flex flex-col justify-between">
-                <div className="flex items-center justify-between text-neutral-400 mb-1">
-                  <span className="text-[10px] font-mono uppercase">Avg TDS</span>
-                  <Droplets className="w-3.5 h-3.5 text-cyan-400" />
+              <div className="p-2 sm:p-2.5 rounded-xl bg-white/[0.03] border border-white/5 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-neutral-400 mb-0.5">
+                  <span className="text-[9px] font-mono uppercase">Avg TDS</span>
+                  <Droplets className="w-3 h-3 text-[#818CF8]" />
                 </div>
-                <div className="text-base sm:text-lg font-bold text-[#00D1FF] font-mono">
+                <div className="text-sm sm:text-base font-bold text-[#818CF8] font-mono">
                   {avgTds !== null ? `${avgTds} ppm` : '--'}
                 </div>
-                <span className="text-[9px] text-neutral-400 mt-0.5">&lt; 300 ppm Ideal</span>
+                <span className="text-[8px] text-neutral-400">&lt;300 ppm ideal</span>
               </div>
 
               {/* Avg Temp */}
-              <div className="p-2.5 sm:p-3 rounded-2xl bg-white/[0.03] border border-white/5 flex flex-col justify-between">
-                <div className="flex items-center justify-between text-neutral-400 mb-1">
-                  <span className="text-[10px] font-mono uppercase">Avg Temp</span>
-                  <Thermometer className="w-3.5 h-3.5 text-emerald-400" />
+              <div className="p-2 sm:p-2.5 rounded-xl bg-white/[0.03] border border-white/5 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-neutral-400 mb-0.5">
+                  <span className="text-[9px] font-mono uppercase">Avg Temp</span>
+                  <Thermometer className="w-3 h-3 text-emerald-400" />
                 </div>
-                <div className="text-base sm:text-lg font-bold text-white font-mono">
+                <div className="text-sm sm:text-base font-bold text-white font-mono">
                   {avgTemp !== null ? `${avgTemp}°C` : '--'}
                 </div>
-                <span className="text-[9px] text-neutral-400 mt-0.5">Ambient water</span>
+                <span className="text-[8px] text-neutral-400">ambient</span>
               </div>
 
               {/* Avg Turbidity */}
-              <div className="p-2.5 sm:p-3 rounded-2xl bg-white/[0.03] border border-white/5 flex flex-col justify-between">
-                <div className="flex items-center justify-between text-neutral-400 mb-1">
-                  <span className="text-[10px] font-mono uppercase">Avg Clarity</span>
-                  <Eye className="w-3.5 h-3.5 text-amber-400" />
+              <div className="p-2 sm:p-2.5 rounded-xl bg-white/[0.03] border border-white/5 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-neutral-400 mb-0.5">
+                  <span className="text-[9px] font-mono uppercase">Clarity</span>
+                  <Eye className="w-3 h-3 text-amber-400" />
                 </div>
-                <div className="text-base sm:text-lg font-bold text-white font-mono">
+                <div className="text-sm sm:text-base font-bold text-white font-mono">
                   {avgTurb !== null ? `${avgTurb} NTU` : '--'}
                 </div>
-                <span className="text-[9px] text-neutral-400 mt-0.5">&lt; 1.0 NTU Clear</span>
+                <span className="text-[8px] text-neutral-400">&lt;1.0 NTU clear</span>
               </div>
             </div>
 
-            {/* Analysis sampling meta info & Copy button */}
-            <div className="flex items-center justify-between text-[11px] text-neutral-400 px-1 font-mono">
-              <span>Stabilized across {sampleCount} telemetry packet{sampleCount === 1 ? '' : 's'}</span>
+            {/* Copy Summary Link */}
+            <div className="flex items-center justify-between text-[10px] text-neutral-400 px-1 font-mono">
+              <span>Sampled across {sampleCount} telemetry packets</span>
               <button
                 type="button"
                 onClick={handleCopyReport}
                 className="flex items-center gap-1 text-[#00D1FF] hover:underline cursor-pointer"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copied ? 'Copied Summary!' : 'Copy Summary'}</span>
+                {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                <span>{copied ? 'Copied' : 'Copy Summary'}</span>
               </button>
             </div>
 
-            {/* 3. Interactive Prompt: "Publish to Community Map?" */}
-            <div className="rounded-2xl bg-[#090B0E] border border-white/10 p-3.5 sm:p-4 space-y-3">
-              {/* Interactive Prompt Header & Choice Buttons */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-9 h-9 rounded-xl bg-[#00D1FF]/15 border border-[#00D1FF]/30 text-[#00D1FF] flex items-center justify-center shrink-0">
-                    <Share2 className="w-4.5 h-4.5 text-[#00D1FF]" />
+            {/* 3. Enforced Community Sharing Panel */}
+            <div className="rounded-2xl bg-[#080B10] border border-white/10 p-3 sm:p-3.5 space-y-3">
+              {/* Header with Enforced CTA: "Yes, share to map" */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-[#00D1FF]/15 border border-[#00D1FF]/30 text-[#00D1FF] flex items-center justify-center shrink-0">
+                    <Share2 className="w-3.5 h-3.5 text-[#00D1FF]" />
                   </div>
                   <div className="min-w-0">
-                    <h4 className="text-xs sm:text-sm font-bold text-white">
-                      Publish to Community Map?
+                    <h4 className="text-xs sm:text-sm font-bold text-white truncate">
+                      Community Map Sharing
                     </h4>
-                    <p className="text-[11px] text-neutral-400">
-                      Share this verified test to help others locate safe drinking water
+                    <p className="text-[10px] text-neutral-400 truncate">
+                      Share verified water quality with nearby users
                     </p>
                   </div>
                 </div>
 
-                {/* Interactive Choice Selector */}
-                <div className="flex items-center gap-1.5 p-1 rounded-xl bg-white/[0.04] border border-white/5 shrink-0 self-start sm:self-auto">
+                {/* Enforced CTA Button 1: "Yes, share to map" */}
+                <button
+                  type="button"
+                  onClick={() => acquireFreshLocation()}
+                  className="px-2.5 py-1.5 rounded-xl bg-[#00D1FF]/15 hover:bg-[#00D1FF]/25 active:bg-[#00D1FF]/30 text-[#00D1FF] border border-[#00D1FF]/35 text-xs font-semibold flex items-center gap-1.5 shadow-sm shadow-[#00D1FF]/10 shrink-0 cursor-pointer active:scale-95 transition-all"
+                  title="Confirmed for Community Map sharing"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#00D1FF]" />
+                  <span>Yes, share to map</span>
+                </button>
+              </div>
+
+              {/* GPS Location Status */}
+              <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-1.5">
+                <div className="flex items-center justify-between text-[10px]">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <MapPin className="w-3 h-3 text-[#00D1FF] shrink-0" />
+                    <span className="font-mono text-neutral-400 uppercase">GPS Verification</span>
+                  </div>
+
+                  {locStatus === 'success' && deviceGps && (
+                    <span className="text-emerald-400 font-mono font-medium flex items-center gap-1 shrink-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      ±{Math.round(deviceGps.accuracy)}m
+                    </span>
+                  )}
+                  {locStatus === 'acquiring' && (
+                    <span className="text-[#00D1FF] font-mono flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Acquiring GPS...
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-white truncate font-medium">
+                    {locStatus === 'success'
+                      ? placeName || `${deviceGps?.lat.toFixed(4)}°, ${deviceGps?.lon.toFixed(4)}°`
+                      : locStatus === 'acquiring'
+                      ? 'Detecting current GPS coordinates...'
+                      : 'GPS location needed'}
+                  </span>
                   <button
                     type="button"
-                    onClick={() => setShareToCommunity(true)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
-                      shareToCommunity
-                        ? 'bg-[#00D1FF] text-[#090B0E] shadow-sm shadow-[#00D1FF]/20'
-                        : 'text-neutral-400 hover:text-white'
-                    }`}
+                    onClick={acquireFreshLocation}
+                    disabled={locStatus === 'acquiring'}
+                    className="px-2 py-0.5 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-300 text-[10px] font-mono flex items-center gap-1 shrink-0 cursor-pointer"
                   >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Yes, Share to Map</span>
+                    <RotateCw className={`w-2.5 h-2.5 ${locStatus === 'acquiring' ? 'animate-spin' : ''}`} />
+                    <span>Refresh</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setShareToCommunity(false)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      !shareToCommunity
-                        ? 'bg-white/10 text-white'
-                        : 'text-neutral-400 hover:text-white'
-                    }`}
-                  >
-                    <span>Keep Private</span>
-                  </button>
+                </div>
+
+                {locError && (
+                  <div className="p-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 text-[10px] flex items-start gap-1">
+                    <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0 mt-0.5" />
+                    <span>{locError}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Source Name Input */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-medium text-neutral-300 block">
+                  Source Location Name
+                </label>
+                <input
+                  type="text"
+                  value={sourceName}
+                  onChange={(e) => setSourceName(e.target.value)}
+                  placeholder="e.g. Park Drinking Fountain, 2nd Floor Filter"
+                  className="w-full bg-[#10151D] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50"
+                />
+              </div>
+
+              {/* Source Type Pills */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-medium text-neutral-300 block">Source Type</label>
+                <div className="grid grid-cols-3 gap-1">
+                  {[
+                    { id: 'fountain', label: 'Fountain' },
+                    { id: 'filtration_station', label: 'Refill Station' },
+                    { id: 'tap', label: 'Municipal Tap' },
+                    { id: 'spring', label: 'Natural Spring' },
+                    { id: 'well', label: 'Well' },
+                  ].map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setSourceType(cat.id as any)}
+                      className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-all text-center truncate cursor-pointer ${
+                        sourceType === cat.id
+                          ? 'bg-[#00D1FF]/20 text-[#00D1FF] border border-[#00D1FF]/40'
+                          : 'bg-white/[0.03] text-neutral-400 border border-white/5 hover:text-white'
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Private State Notice */}
-              {!shareToCommunity && (
-                <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 text-xs text-neutral-400 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>This test result remains private on your local device. It will not be broadcast to the community map.</span>
-                </div>
-              )}
+              {/* Optional Observation Notes */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-medium text-neutral-300 block">Notes (Optional)</label>
+                <input
+                  type="text"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="e.g. Clean flow, chilled, filter status green"
+                  className="w-full bg-[#10151D] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50"
+                />
+              </div>
 
-              {/* Collapsible Community Submission Form */}
-              <AnimatePresence>
-                {shareToCommunity && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="space-y-3 pt-2 border-t border-white/5"
-                  >
-                    {/* GPS Location Status Box */}
-                    <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 space-y-2">
-                      <div className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <MapPin className="w-3.5 h-3.5 text-[#00D1FF] shrink-0" />
-                          <span className="font-mono text-neutral-400 uppercase text-[10px]">
-                            GPS Verification
-                          </span>
-                        </div>
-
-                        {locStatus === 'success' && deviceGps && (
-                          <span className="text-[10px] text-emerald-400 font-mono font-medium flex items-center gap-1 shrink-0">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            ±{Math.round(deviceGps.accuracy)}m accuracy
-                          </span>
-                        )}
-                        {locStatus === 'acquiring' && (
-                          <span className="text-[10px] text-[#00D1FF] font-mono flex items-center gap-1">
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                            Acquiring GPS...
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs text-white truncate font-medium">
-                          {locStatus === 'success'
-                            ? placeName || `${deviceGps?.lat.toFixed(4)}°, ${deviceGps?.lon.toFixed(4)}°`
-                            : locStatus === 'acquiring'
-                            ? 'Detecting device location...'
-                            : 'GPS not acquired'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={acquireFreshLocation}
-                          disabled={locStatus === 'acquiring'}
-                          className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-300 text-[10px] font-mono flex items-center gap-1 shrink-0 cursor-pointer"
-                        >
-                          <RotateCw className={`w-3 h-3 ${locStatus === 'acquiring' ? 'animate-spin' : ''}`} />
-                          <span>Refresh GPS</span>
-                        </button>
-                      </div>
-
-                      {locError && (
-                        <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-start gap-1.5">
-                          <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
-                          <span>{locError}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Source Name & Type */}
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-medium text-neutral-300 block">
-                        Source Name / Location Label
-                      </label>
-                      <input
-                        type="text"
-                        value={sourceName}
-                        onChange={(e) => setSourceName(e.target.value)}
-                        placeholder="e.g. 2nd Floor Water Cooler, Park Fountain"
-                        className="w-full bg-[#10151D] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50"
-                      />
-                    </div>
-
-                    {/* Source Categories */}
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-medium text-neutral-300 block">
-                        Source Type
-                      </label>
-                      <div className="grid grid-cols-2 xs:grid-cols-3 gap-1.5">
-                        {[
-                          { id: 'fountain', label: 'Drinking Fountain' },
-                          { id: 'filtration_station', label: 'Refill Station' },
-                          { id: 'tap', label: 'Municipal Tap' },
-                          { id: 'spring', label: 'Natural Spring' },
-                          { id: 'well', label: 'Groundwater Well' },
-                        ].map((cat) => (
-                          <button
-                            key={cat.id}
-                            type="button"
-                            onClick={() => setSourceType(cat.id as any)}
-                            className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-all text-left truncate cursor-pointer ${
-                              sourceType === cat.id
-                                ? 'bg-[#00D1FF]/20 text-[#00D1FF] border border-[#00D1FF]/40'
-                                : 'bg-white/[0.03] text-neutral-400 border border-white/5 hover:text-white'
-                            }`}
-                          >
-                            {cat.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Optional Notes */}
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-medium text-neutral-300 block">
-                        Observation Notes (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        placeholder="e.g. Crisp flow, cold, filter light active"
-                        className="w-full bg-[#10151D] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#00D1FF]/50"
-                      />
-                    </div>
-
-                    {/* Publish to Community Button */}
-                    <button
-                      id="btn-publish-community-report"
-                      type="button"
-                      onClick={handlePublishToCommunity}
-                      disabled={isSubmitting || locStatus !== 'success' || !reportCoords}
-                      className="w-full py-2.5 px-4 rounded-xl bg-[#00D1FF] hover:bg-[#00B4D8] active:bg-[#0096B4] text-[#090B0E] text-xs sm:text-sm font-semibold shadow-lg shadow-[#00D1FF]/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50 touch-target cursor-pointer disabled:cursor-not-allowed"
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                          <span>Publishing to Map...</span>
-                        </>
-                      ) : submitSuccess ? (
-                        <>
-                          <CheckCircle2 className="w-4 h-4 text-[#090B0E] shrink-0" />
-                          <span>Published Successfully!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Share2 className="w-4 h-4 shrink-0" />
-                          <span>Publish to Community Map</span>
-                        </>
-                      )}
-                    </button>
-                  </motion.div>
+              {/* Enforced CTA Button 2: "Publish to community map" */}
+              <button
+                id="btn-publish-community-report"
+                type="button"
+                onClick={() => handlePublishToCommunity()}
+                disabled={isSubmitting || locStatus !== 'success' || !reportCoords}
+                className="w-full py-2.5 px-4 rounded-xl bg-[#00D1FF] hover:bg-[#00B4D8] active:bg-[#0096B4] text-[#090B0E] text-xs sm:text-sm font-semibold shadow-lg shadow-[#00D1FF]/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50 touch-target cursor-pointer disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                    <span>Publishing to Community Map...</span>
+                  </>
+                ) : submitSuccess ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-[#090B0E] shrink-0" />
+                    <span>Published to Community Map!</span>
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-4 h-4 shrink-0" />
+                    <span>Publish to community map</span>
+                  </>
                 )}
-              </AnimatePresence>
+              </button>
             </div>
-          </div>
-
-          {/* Footer Close Button */}
-          <div className="pt-3 border-t border-white/10 flex items-center justify-end gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-medium transition-colors cursor-pointer"
-            >
-              Done
-            </button>
           </div>
         </motion.div>
       </div>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback, useRef, useMemo } from 'react';
 import { BottleData, HydrationLog, SensorReading, WaterQualityEvaluation } from '../types';
 import { useAuth } from './AuthContext';
 import { defaultSensorProvider } from '../services/sensor/SensorDataProvider';
@@ -19,6 +19,8 @@ interface BottleContextType {
   qualityEval: WaterQualityEvaluation;
   hydrationLogs: HydrationLog[];
   todayConsumed: number;
+  hardwareConsumed: number;
+  manualConsumed: number;
   hydrationGoal: number;
   hydrationPercent: number;
   remainingMl: number;
@@ -185,12 +187,65 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
   }, [bottleId]);
 
+  // Ref to track physical bottle water level changes across snapshots
+  const prevPhysicalLevelMlRef = useRef<number | null>(null);
+
+  // Normalize live bottle water level to milliliters (handles both 0-100% and raw ml)
+  const currentPhysicalLevelMl = useMemo(() => {
+    if (!bottle || bottle.waterLevel === null || bottle.waterLevel === undefined) return null;
+    const maxCap = bottle.maxCapacity || 750;
+    if (bottle.waterLevel <= 100 && maxCap > 100) {
+      return Math.round((bottle.waterLevel / 100) * maxCap);
+    }
+    return Math.round(bottle.waterLevel);
+  }, [bottle?.waterLevel, bottle?.maxCapacity]);
+
+  // Monitor physical bottle water level drop to record hardware-synced consumption
+  useEffect(() => {
+    if (currentPhysicalLevelMl === null || !user) {
+      return;
+    }
+
+    if (prevPhysicalLevelMlRef.current === null) {
+      // First baseline reading
+      prevPhysicalLevelMlRef.current = currentPhysicalLevelMl;
+      return;
+    }
+
+    const prev = prevPhysicalLevelMlRef.current;
+    const drop = prev - currentPhysicalLevelMl;
+
+    // A drop in water level (>= 15 ml to ignore ToF micro-jitter) indicates fluid drunk from physical smart bottle
+    if (drop >= 15) {
+      recordIntake(drop, 'bottle_auto', 'Detected from Smart Bottle ToF sensor');
+      prevPhysicalLevelMlRef.current = currentPhysicalLevelMl;
+    } else if (drop < -30) {
+      // Refill detected
+      prevPhysicalLevelMlRef.current = currentPhysicalLevelMl;
+    }
+  }, [currentPhysicalLevelMl, user]);
+
   // Calculate today's consumed total (matching today's date in local ISO string)
   const todayDateStr = new Date().toISOString().slice(0, 10);
   const todayLogs = hydrationLogs.filter((l) => l.timestamp?.startsWith(todayDateStr));
-  const todayConsumed = todayLogs.reduce((sum, log) => sum + log.amountMl, 0);
+  const todayConsumed = Math.max(0, todayLogs.reduce((sum, log) => sum + log.amountMl, 0));
   const hydrationPercent = Math.min(100, Math.round((todayConsumed / hydrationGoal) * 100));
   const remainingMl = Math.max(0, hydrationGoal - todayConsumed);
+
+  // Split consumed fluid by source: Hardware (bottle_auto) vs Manual (quick_preset, manual_add, etc.)
+  const hardwareConsumed = Math.max(
+    0,
+    todayLogs
+      .filter((l) => l.source === 'bottle_auto' || l.source === 'hardware_synced')
+      .reduce((sum, log) => sum + log.amountMl, 0)
+  );
+
+  const manualConsumed = Math.max(
+    0,
+    todayLogs
+      .filter((l) => l.source !== 'bottle_auto' && l.source !== 'hardware_synced')
+      .reduce((sum, log) => sum + log.amountMl, 0)
+  );
 
   // Determine physical handshake status & live online status
   let lastSyncTimeMs: number | null = null;
@@ -336,8 +391,16 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       console.error('Error saving hydration log to Firestore:', err);
     }
 
-    // Deduct fluid from bottle if present
-    if (bottle && bottle.bottleId && bottle.waterLevel > 0) {
+    // Deduct fluid from bottle in Firestore only for manual additions (not hardware auto-detected drops)
+    if (
+      source !== 'bottle_auto' &&
+      source !== 'hardware_synced' &&
+      amountMl > 0 &&
+      bottle &&
+      bottle.bottleId &&
+      typeof bottle.waterLevel === 'number' &&
+      bottle.waterLevel > 0
+    ) {
       const newLevel = Math.max(0, bottle.waterLevel - amountMl);
       await defaultSensorProvider.updateBottleState(bottle.bottleId, {
         waterLevel: newLevel,
@@ -449,6 +512,8 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         qualityEval,
         hydrationLogs,
         todayConsumed,
+        hardwareConsumed,
+        manualConsumed,
         hydrationGoal,
         hydrationPercent,
         remainingMl,

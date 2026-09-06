@@ -24,6 +24,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     bottle,
     qualityEval,
     todayConsumed,
+    hardwareConsumed,
+    manualConsumed,
     hydrationGoal,
     hydrationPercent,
     remainingMl,
@@ -129,6 +131,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           waterLevel={bottle?.waterLevel ?? null}
           maxCapacity={bottle?.maxCapacity ?? 750}
           todayConsumed={todayConsumed}
+          hardwareConsumed={hardwareConsumed}
+          manualConsumed={manualConsumed}
           hydrationGoal={hydrationGoal}
           hydrationPercent={hydrationPercent}
           remainingMl={remainingMl}

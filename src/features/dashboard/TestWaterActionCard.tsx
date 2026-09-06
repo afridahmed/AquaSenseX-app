@@ -71,7 +71,15 @@ export const TestWaterActionCard: React.FC<TestWaterActionCardProps> = ({
   useEffect(() => {
     if (!isAnalyzing || !activeBottleData) return;
 
+    // Push incoming packet immediately
     setReadingBuffer((prev) => [...prev, activeBottleData]);
+
+    // Sample telemetry at 800ms cadence to ensure smooth continuous stream even between network ping delays
+    const sampleInterval = setInterval(() => {
+      setReadingBuffer((prev) => [...prev, activeBottleData]);
+    }, 800);
+
+    return () => clearInterval(sampleInterval);
   }, [activeBottleData, isAnalyzing]);
 
   // Strict disconnection watchdog: halt analysis immediately if device drops offline
@@ -234,6 +242,7 @@ export const TestWaterActionCard: React.FC<TestWaterActionCardProps> = ({
                   scanProgress={scanProgress}
                   remainingSeconds={Math.max(1, Math.ceil(15 - (scanProgress / 100) * 15))}
                   packetCount={readingBuffer.length}
+                  readingBuffer={readingBuffer}
                   currentPh={activeBottleData?.ph}
                   currentTds={activeBottleData?.tds}
                   currentTurbidity={activeBottleData?.turbidity}
