@@ -105,7 +105,7 @@ function generateSensorPayload() {
 
   // Watchdog & status fields
   const online = true;
-  const lastSyncTimestamp = new Date().toISOString();
+  const nowIso = new Date().toISOString();
 
   return {
     ph,
@@ -115,7 +115,10 @@ function generateSensorPayload() {
     waterLevel,
     battery,
     online,
-    lastSyncTimestamp
+    lastSyncTimestamp: nowIso,
+    lastUpdated: nowIso,
+    qualityCategory: 'Excellent',
+    isStale: false,
   };
 }
 

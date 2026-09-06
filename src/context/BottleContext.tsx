@@ -42,8 +42,8 @@ interface BottleContextType {
 
 const BottleContext = createContext<BottleContextType | undefined>(undefined);
 
-// 15-second hardware offline watchdog timeout
-const OFFLINE_WATCHDOG_TIMEOUT_MS = 15000;
+// 45-second hardware offline watchdog timeout to prevent false-positive offline flips
+const OFFLINE_WATCHDOG_TIMEOUT_MS = 45000;
 
 export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { user, updateUserProfile } = useAuth();
@@ -56,7 +56,18 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const bottleId = user?.bottleId || user?.assignedBottleId;
   const hydrationGoal = user?.hydrationGoal || 2500;
 
-  // 15-second physical ESP32 watchdog timer
+  // Immediate state wiping on user logout or unpairing
+  useEffect(() => {
+    if (!user) {
+      setBottle(null);
+      setHydrationLogs([]);
+      setIsHardwareTimedOut(false);
+      setIsSimulatorOpen(false);
+      setAiTip('AquaSense X is monitoring water safety and hydration.');
+    }
+  }, [user]);
+
+  // Physical ESP32 watchdog timer
   useEffect(() => {
     const checkWatchdog = () => {
       if (!bottle) {
@@ -64,33 +75,40 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         return;
       }
 
-      const syncTimeRaw = bottle.lastSyncTimestamp || bottle.lastUpdated;
-      if (!syncTimeRaw) {
+      if (bottle.online === false) {
         setIsHardwareTimedOut(true);
+        return;
+      }
+
+      const syncObj = (bottle.lastSyncTimestamp || bottle.lastUpdated) as any;
+      if (!syncObj) {
+        setIsHardwareTimedOut(!bottle.online);
         return;
       }
 
       let lastSyncMs: number;
-      if (typeof syncTimeRaw === 'number') {
-        lastSyncMs = syncTimeRaw;
-      } else if (typeof syncTimeRaw === 'object' && syncTimeRaw && 'toMillis' in syncTimeRaw) {
-        lastSyncMs = (syncTimeRaw as any).toMillis();
+      if (typeof syncObj === 'number') {
+        lastSyncMs = syncObj < 1e11 ? syncObj * 1000 : syncObj;
+      } else if (typeof syncObj === 'object' && syncObj && 'toMillis' in syncObj) {
+        lastSyncMs = syncObj.toMillis();
+      } else if (typeof syncObj === 'object' && syncObj && typeof syncObj.seconds === 'number') {
+        lastSyncMs = syncObj.seconds * 1000;
       } else {
-        lastSyncMs = new Date(syncTimeRaw).getTime();
+        lastSyncMs = new Date(syncObj).getTime();
       }
 
       if (isNaN(lastSyncMs) || lastSyncMs <= 0) {
-        setIsHardwareTimedOut(true);
+        setIsHardwareTimedOut(!bottle.online);
         return;
       }
 
-      const elapsed = Date.now() - lastSyncMs;
+      const elapsed = Math.max(0, Date.now() - lastSyncMs);
       const timedOut = elapsed > OFFLINE_WATCHDOG_TIMEOUT_MS;
       setIsHardwareTimedOut(timedOut);
     };
 
     checkWatchdog();
-    const interval = setInterval(checkWatchdog, 1500);
+    const interval = setInterval(checkWatchdog, 2500);
     return () => clearInterval(interval);
   }, [bottle]);
 
@@ -162,42 +180,52 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // Determine physical handshake status & live online status
   let lastSyncTimeMs: number | null = null;
-  const syncTimeRaw = bottle?.lastSyncTimestamp || bottle?.lastUpdated;
-  if (syncTimeRaw) {
-    if (typeof syncTimeRaw === 'number') {
-      lastSyncTimeMs = syncTimeRaw;
-    } else if (typeof syncTimeRaw === 'object' && syncTimeRaw && 'toMillis' in syncTimeRaw) {
-      lastSyncTimeMs = (syncTimeRaw as any).toMillis();
+  const syncObj = (bottle?.lastSyncTimestamp || bottle?.lastUpdated) as any;
+  if (syncObj) {
+    if (typeof syncObj === 'number') {
+      lastSyncTimeMs = syncObj < 1e11 ? syncObj * 1000 : syncObj;
+    } else if (typeof syncObj === 'object' && syncObj && 'toMillis' in syncObj) {
+      lastSyncTimeMs = syncObj.toMillis();
+    } else if (typeof syncObj === 'object' && syncObj && typeof syncObj.seconds === 'number') {
+      lastSyncTimeMs = syncObj.seconds * 1000;
     } else {
-      lastSyncTimeMs = new Date(syncTimeRaw).getTime();
+      const parsed = new Date(syncObj).getTime();
+      if (!isNaN(parsed)) {
+        lastSyncTimeMs = parsed;
+      }
     }
   }
 
   const hasSyncedOnce = Boolean(lastSyncTimeMs && !isNaN(lastSyncTimeMs) && lastSyncTimeMs > 0);
-  const isWithinWatchdog = Boolean(hasSyncedOnce && (Date.now() - (lastSyncTimeMs as number) < OFFLINE_WATCHDOG_TIMEOUT_MS));
+  const now = Date.now();
+  const elapsed = lastSyncTimeMs ? Math.max(0, now - lastSyncTimeMs) : Infinity;
+  const isWithinWatchdog = Boolean(hasSyncedOnce && elapsed < OFFLINE_WATCHDOG_TIMEOUT_MS);
   const isDeviceOnline = Boolean(bottle?.online === true && isWithinWatchdog && !isHardwareTimedOut);
   const isOnline = isDeviceOnline;
   const isAwaitingConnection = Boolean(bottleId && (!bottle || !hasSyncedOnce));
 
-  // Compute live quality evaluation (sets to null/offline state when offline)
+  // Compute live quality evaluation (gracefully handles offline states while preserving readings)
   const qualityEval: WaterQualityEvaluation = evaluateWaterQuality({
     isOffline: !isDeviceOnline,
-    ph: isDeviceOnline ? (bottle?.ph ?? null) : null,
-    tds: isDeviceOnline ? (bottle?.tds ?? null) : null,
-    turbidity: isDeviceOnline ? (bottle?.turbidity ?? null) : null,
-    temperature: isDeviceOnline ? (bottle?.temperature ?? null) : null,
+    ph: bottle?.ph ?? null,
+    tds: bottle?.tds ?? null,
+    turbidity: bottle?.turbidity ?? null,
+    temperature: bottle?.temperature ?? null,
   });
 
   const effectiveBottle: BottleData | null = bottle
     ? {
         ...bottle,
         online: isDeviceOnline,
-        ph: isDeviceOnline ? (bottle.ph ?? null) : null,
-        tds: isDeviceOnline ? (bottle.tds ?? null) : null,
-        turbidity: isDeviceOnline ? (bottle.turbidity ?? null) : null,
-        temperature: isDeviceOnline ? (bottle.temperature ?? null) : null,
-        waterLevel: isDeviceOnline ? (bottle.waterLevel ?? null) : null,
-        qualityScore: isDeviceOnline ? (bottle.qualityScore ?? null) : null,
+        // Preserve sensor readings from bottle so historical/recent data remains visible even when offline
+        ph: bottle.ph ?? null,
+        tds: bottle.tds ?? null,
+        turbidity: bottle.turbidity ?? null,
+        temperature: bottle.temperature ?? null,
+        waterLevel: typeof bottle.waterLevel === 'number' ? bottle.waterLevel : 0,
+        qualityScore: isDeviceOnline
+          ? (typeof bottle.qualityScore === 'number' ? bottle.qualityScore : qualityEval.score)
+          : (typeof bottle.qualityScore === 'number' ? bottle.qualityScore : qualityEval.score),
         qualityCategory: isDeviceOnline
           ? (bottle.qualityCategory && bottle.qualityCategory !== 'Offline' && bottle.qualityCategory !== 'Awaiting Connection'
               ? bottle.qualityCategory

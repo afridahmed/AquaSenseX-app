@@ -345,7 +345,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Sign out
+  // Sign out with comprehensive state & storage wiping
   const signOut = async () => {
     setLoading(true);
     try {
@@ -353,9 +353,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (error: any) {
       console.error('Firebase sign out error:', error);
     } finally {
+      // 1. Wipe Firebase and App Context state
       setFirebaseUser(null);
       setUser(null);
       setIsPairingModalOpen(false);
+
+      // 2. Comprehensive purging of all local storage, session state, and cached credentials
+      try {
+        localStorage.removeItem('aquasense_coach_chat');
+        localStorage.removeItem('aquasense_last_bottle');
+        Object.keys(localStorage).forEach((key) => {
+          if (
+            key.startsWith('aquasense_') ||
+            key.startsWith('asx_') ||
+            key.startsWith('firebase:authUser')
+          ) {
+            if (key !== 'aquasense_theme') {
+              localStorage.removeItem(key);
+            }
+          }
+        });
+        sessionStorage.clear();
+      } catch (storageErr) {
+        console.warn('Storage purge warning on signOut:', storageErr);
+      }
+
       setLoading(false);
     }
   };
@@ -466,12 +488,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           ? (userSnap.data()?.assignedBottleId || userSnap.data()?.bottleId)
           : (user?.assignedBottleId || user?.bottleId);
 
-        if (prevBottleId && prevBottleId !== cleaned) {
-          const prevBottleRef = doc(db, 'bottles', prevBottleId);
+        if (prevBottleId && prevBottleId.trim().toUpperCase() !== cleaned) {
+          const prevBottleRef = doc(db, 'bottles', prevBottleId.trim().toUpperCase());
           const prevBottleSnap = await transaction.get(prevBottleRef);
           if (prevBottleSnap.exists() && prevBottleSnap.data()?.ownerUid === currentUid) {
             transaction.update(prevBottleRef, {
               ownerUid: null,
+              online: false,
+              qualityCategory: 'Offline',
+              lastSyncTimestamp: '',
+              isCleanCycleActive: false,
+              lastUpdated: new Date().toISOString(),
               serverUpdatedAt: serverTimestamp(),
             });
           }
@@ -480,16 +507,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Atomically update bottles/{BOTTLE_ID} with ownerUid: currentUserId
         transaction.update(bottleRef, {
           ownerUid: currentUid,
+          lastUpdated: new Date().toISOString(),
           serverUpdatedAt: serverTimestamp(),
         });
 
         // Atomically update users/{currentUserId} with assignedBottleId: BOTTLE_ID
-        transaction.update(userRef, {
-          assignedBottleId: cleaned,
-          bottleId: cleaned,
-          updatedAt: new Date().toISOString(),
-          serverUpdatedAt: serverTimestamp(),
-        });
+        if (userSnap.exists()) {
+          transaction.update(userRef, {
+            assignedBottleId: cleaned,
+            bottleId: cleaned,
+            updatedAt: new Date().toISOString(),
+            serverUpdatedAt: serverTimestamp(),
+          });
+        } else {
+          transaction.set(
+            userRef,
+            {
+              assignedBottleId: cleaned,
+              bottleId: cleaned,
+              updatedAt: new Date().toISOString(),
+              serverUpdatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        }
       });
 
       // Update local React state after transaction succeeds
@@ -524,8 +565,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Unpair / Change bottle
-  const unpairBottle = async () => {
+  // Unpair / Release bottle with transactional atomic update & metadata reset
+  const unpairBottle = async (targetBottleId?: string) => {
     if (!auth.currentUser) throw new Error('You must be signed in to change a bottle.');
     const currentUid = auth.currentUser.uid;
     const userDocRef = doc(db, 'users', currentUid);
@@ -534,19 +575,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       await runTransaction(db, async (transaction) => {
         const userSnap = await transaction.get(userDocRef);
-        const currentBottleId = userSnap.exists()
-          ? (userSnap.data()?.bottleId || userSnap.data()?.assignedBottleId)
-          : (user?.bottleId || user?.assignedBottleId);
+        const currentBottleId =
+          targetBottleId ||
+          (userSnap.exists()
+            ? (userSnap.data()?.bottleId || userSnap.data()?.assignedBottleId)
+            : (user?.bottleId || user?.assignedBottleId));
 
         if (currentBottleId) {
-          const bottleRef = doc(db, 'bottles', currentBottleId);
+          const cleanedId = String(currentBottleId).trim().toUpperCase();
+          const bottleRef = doc(db, 'bottles', cleanedId);
           const bottleSnap = await transaction.get(bottleRef);
 
           if (bottleSnap.exists()) {
             const bData = bottleSnap.data();
-            if (bData.ownerUid === currentUid) {
+            const bOwner = bData.ownerUid ? String(bData.ownerUid).trim() : null;
+            // Only update if current user is registered owner, or if already unowned
+            if (!bOwner || bOwner === currentUid) {
               transaction.update(bottleRef, {
                 ownerUid: null,
+                online: false,
+                qualityCategory: 'Offline',
+                lastSyncTimestamp: '',
+                isCleanCycleActive: false,
                 lastUpdated: new Date().toISOString(),
                 serverUpdatedAt: serverTimestamp(),
               });
@@ -564,6 +614,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       });
 
+      // Atomically wipe local user context state
       setUser((prev) =>
         prev
           ? {
@@ -574,6 +625,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
           : null
       );
+
+      // Wipe any cached pairing references from storage
+      try {
+        localStorage.removeItem('aquasense_last_bottle');
+      } catch {}
 
       setIsPairingModalOpen(true);
     } catch (err: any) {

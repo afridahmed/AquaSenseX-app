@@ -224,17 +224,14 @@ export function evaluateWaterQuality(
   },
   thresholds = DEFAULT_QUALITY_THRESHOLDS
 ): WaterQualityEvaluation {
-  // If explicitly flagged offline or all critical sensor telemetry is null/undefined
-  const isOffline =
-    params.isOffline ||
-    params.ph === null ||
-    params.ph === undefined ||
-    params.tds === null ||
-    params.tds === undefined ||
-    params.turbidity === null ||
-    params.turbidity === undefined ||
-    params.temperature === null ||
-    params.temperature === undefined;
+  // Check if explicitly flagged offline or if ALL critical sensor parameters are missing
+  const allParamsMissing =
+    (params.ph === null || params.ph === undefined) &&
+    (params.tds === null || params.tds === undefined) &&
+    (params.turbidity === null || params.turbidity === undefined) &&
+    (params.temperature === null || params.temperature === undefined);
+
+  const isOffline = Boolean(params.isOffline || allParamsMissing);
 
   if (isOffline) {
     return {
@@ -248,7 +245,7 @@ export function evaluateWaterQuality(
       parameters: {
         ph: {
           name: 'pH Level',
-          value: null,
+          value: params.ph ?? null,
           unit: 'pH',
           status: 'optimal',
           idealRange: `${thresholds.ph.acceptableMin} – ${thresholds.ph.acceptableMax}`,
@@ -257,7 +254,7 @@ export function evaluateWaterQuality(
         },
         tds: {
           name: 'TDS (Dissolved Solids)',
-          value: null,
+          value: params.tds ?? null,
           unit: 'ppm',
           status: 'optimal',
           idealRange: '< 300 ppm',
@@ -266,7 +263,7 @@ export function evaluateWaterQuality(
         },
         turbidity: {
           name: 'Turbidity (Clarity)',
-          value: null,
+          value: params.turbidity ?? null,
           unit: 'NTU',
           status: 'optimal',
           idealRange: '< 1.0 NTU',
@@ -275,7 +272,7 @@ export function evaluateWaterQuality(
         },
         temperature: {
           name: 'Temperature',
-          value: null,
+          value: params.temperature ?? null,
           unit: '°C',
           status: 'optimal',
           idealRange: '4°C – 20°C',
@@ -289,18 +286,82 @@ export function evaluateWaterQuality(
     };
   }
 
-  const phDetail = evaluatePh(params.ph!, thresholds.ph);
-  const tdsDetail = evaluateTds(params.tds!, thresholds.tds);
-  const turbidityDetail = evaluateTurbidity(params.turbidity!, thresholds.turbidity);
-  const tempDetail = evaluateTemperature(params.temperature!, thresholds.temperature);
+  // Gracefully evaluate each parameter with sensible fallbacks if individual fields are omitted
+  const hasPh = typeof params.ph === 'number' && !isNaN(params.ph);
+  const hasTds = typeof params.tds === 'number' && !isNaN(params.tds);
+  const hasTurbidity = typeof params.turbidity === 'number' && !isNaN(params.turbidity);
+  const hasTemp = typeof params.temperature === 'number' && !isNaN(params.temperature);
 
-  // Weighted total
-  const rawScore =
-    phDetail.scoreContribution * thresholds.ph.weight +
-    tdsDetail.scoreContribution * thresholds.tds.weight +
-    turbidityDetail.scoreContribution * thresholds.turbidity.weight +
-    tempDetail.scoreContribution * thresholds.temperature.weight;
+  const phDetail = hasPh
+    ? evaluatePh(params.ph!, thresholds.ph)
+    : {
+        name: 'pH Level',
+        value: null,
+        unit: 'pH',
+        status: 'acceptable' as const,
+        idealRange: `${thresholds.ph.acceptableMin} – ${thresholds.ph.acceptableMax}`,
+        description: 'Waiting for pH sensor reading.',
+        scoreContribution: 80,
+      };
 
+  const tdsDetail = hasTds
+    ? evaluateTds(params.tds!, thresholds.tds)
+    : {
+        name: 'TDS (Dissolved Solids)',
+        value: null,
+        unit: 'ppm',
+        status: 'acceptable' as const,
+        idealRange: '< 300 ppm',
+        description: 'Waiting for TDS sensor reading.',
+        scoreContribution: 80,
+      };
+
+  const turbidityDetail = hasTurbidity
+    ? evaluateTurbidity(params.turbidity!, thresholds.turbidity)
+    : {
+        name: 'Turbidity (Clarity)',
+        value: null,
+        unit: 'NTU',
+        status: 'acceptable' as const,
+        idealRange: '< 1.0 NTU',
+        description: 'Waiting for optical turbidity reading.',
+        scoreContribution: 80,
+      };
+
+  const tempDetail = hasTemp
+    ? evaluateTemperature(params.temperature!, thresholds.temperature)
+    : {
+        name: 'Temperature',
+        value: null,
+        unit: '°C',
+        status: 'acceptable' as const,
+        idealRange: '4°C – 20°C',
+        description: 'Waiting for temperature sensor reading.',
+        scoreContribution: 80,
+      };
+
+  // Dynamically compute weighted total based on available sensors
+  let totalWeight = 0;
+  let weightedContribution = 0;
+
+  if (hasPh) {
+    totalWeight += thresholds.ph.weight;
+    weightedContribution += phDetail.scoreContribution * thresholds.ph.weight;
+  }
+  if (hasTds) {
+    totalWeight += thresholds.tds.weight;
+    weightedContribution += tdsDetail.scoreContribution * thresholds.tds.weight;
+  }
+  if (hasTurbidity) {
+    totalWeight += thresholds.turbidity.weight;
+    weightedContribution += turbidityDetail.scoreContribution * thresholds.turbidity.weight;
+  }
+  if (hasTemp) {
+    totalWeight += thresholds.temperature.weight;
+    weightedContribution += tempDetail.scoreContribution * thresholds.temperature.weight;
+  }
+
+  const rawScore = totalWeight > 0 ? weightedContribution / totalWeight : 85;
   const score = Math.round(Math.max(0, Math.min(100, rawScore)));
 
   let category: WaterQualityCategory = 'Excellent';
