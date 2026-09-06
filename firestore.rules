@@ -48,7 +48,9 @@ service cloud.firestore {
         // Case 2: Current registered owner updating telemetry or releasing bottle (setting ownerUid to null)
         (isAuthenticated() && resource.data.ownerUid == request.auth.uid && (request.resource.data.ownerUid == request.auth.uid || request.resource.data.ownerUid == null)) ||
         // Case 3: Maintenance resetting an unowned bottle or factory resetting back to unowned
-        (request.resource.data.ownerUid == null || request.resource.data.ownerUid == '')
+        (request.resource.data.ownerUid == null || request.resource.data.ownerUid == '') ||
+        // Case 4: Hardware sensor telemetry streaming (preserves ownerUid integrity)
+        (request.resource.data.ownerUid == resource.data.ownerUid)
       );
       allow delete: if true;
 

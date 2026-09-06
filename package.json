@@ -13,6 +13,7 @@
     "setup:prod-bottle": "node setup_production_bottle.mjs",
     "reset:prod-bottle": "node reset_prod_01.mjs",
     "setup:test-env": "node setup_test_environment.mjs",
+    "simulate:hardware": "node simulate_hardware.mjs",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
