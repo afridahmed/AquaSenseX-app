@@ -30,7 +30,7 @@ export interface CombinedBottleHydrationCardProps {
 
 export const CombinedBottleHydrationCard: React.FC<CombinedBottleHydrationCardProps> = ({
   waterLevel,
-  maxCapacity = 750,
+  maxCapacity = 2000,
   todayConsumed,
   hardwareConsumed: propHardwareConsumed,
   manualConsumed: propManualConsumed,

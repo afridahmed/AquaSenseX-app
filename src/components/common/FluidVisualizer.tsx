@@ -11,7 +11,7 @@ interface FluidVisualizerProps {
 
 export const FluidVisualizer: React.FC<FluidVisualizerProps> = ({
   currentMl,
-  maxCapacity = 750,
+  maxCapacity = 2000,
   onDrink,
   onRefill,
 }) => {

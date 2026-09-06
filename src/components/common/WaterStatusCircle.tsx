@@ -50,14 +50,31 @@ export const WaterStatusCircle: React.FC<WaterStatusCircleProps> = ({
     return '#f43f5e'; // Rose
   };
 
+  // Seamless radial gradient glow across all states (Blue, Green, Yellow, Red) to eliminate box artifacts
+  const getGlowStyle = () => {
+    if (isOffline) return { opacity: 0 };
+    let glowRgb = '0, 209, 255'; // Electric Cyan / Blue (Excellent)
+    if (score < 50) {
+      glowRgb = '244, 63, 94'; // Rose / Red (Poor)
+    } else if (score < 70) {
+      glowRgb = '245, 158, 11'; // Amber / Yellow (Caution)
+    } else if (score < 88) {
+      glowRgb = '16, 185, 129'; // Emerald / Green (Good)
+    }
+
+    return {
+      background: `radial-gradient(circle at center, rgba(${glowRgb}, 0.28) 0%, rgba(${glowRgb}, 0.1) 45%, transparent 70%)`,
+    };
+  };
+
   return (
     <div className="flex flex-col items-center justify-between p-4 xs:p-5 sm:p-6 lg:p-7 rounded-[28px] sm:rounded-[32px] bg-[#12161C] border border-white/5 relative overflow-hidden shadow-2xl transition-all h-full">
-      {/* Subtle background radiant glow (disabled when offline) */}
+      {/* Subtle background radiant glow with seamless radial gradient diffusion */}
       <div
-        className={`absolute -top-24 left-1/2 -translate-x-1/2 w-48 sm:w-64 h-48 sm:h-64 rounded-full blur-3xl transition-all duration-700 pointer-events-none ${
-          isOffline ? 'opacity-0' : 'opacity-20'
+        className={`absolute -top-20 left-1/2 -translate-x-1/2 w-64 sm:w-80 h-64 sm:h-80 rounded-full blur-3xl transition-all duration-700 pointer-events-none ${
+          isOffline ? 'opacity-0' : 'opacity-100'
         }`}
-        style={{ backgroundColor: isOffline ? 'transparent' : getStrokeColor() }}
+        style={getGlowStyle()}
       />
 
       {/* Top Status Header Badge */}

@@ -8,6 +8,7 @@ import {
   Activity,
   RotateCw,
   Sparkles,
+  Zap,
   Clock,
   ShieldCheck,
   FileText,
@@ -15,7 +16,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { WaterAnalysisReportModal } from './WaterAnalysisReportModal';
-import { SmartwatchECGTelemetryView } from './SmartwatchECGTelemetryView';
+import { LiveSensorChart } from '../../components/LiveSensorChart';
 
 export interface AnalysisResult {
   ph: number | null;
@@ -237,17 +238,90 @@ export const TestWaterActionCard: React.FC<TestWaterActionCardProps> = ({
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
+                className="flex flex-col gap-3 w-full"
               >
-                <SmartwatchECGTelemetryView
-                  scanProgress={scanProgress}
-                  remainingSeconds={Math.max(1, Math.ceil(15 - (scanProgress / 100) * 15))}
-                  packetCount={readingBuffer.length}
-                  readingBuffer={readingBuffer}
-                  currentPh={activeBottleData?.ph}
-                  currentTds={activeBottleData?.tds}
-                  currentTurbidity={activeBottleData?.turbidity}
-                  currentTemp={activeBottleData?.temperature}
-                />
+                {/* Top HUD bar */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-[#00D1FF]/15 border border-[#00D1FF]/30 flex items-center justify-center shrink-0">
+                      <Activity className="w-4 h-4 animate-pulse text-[#00D1FF]" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs sm:text-sm font-bold text-white tracking-tight truncate">Live Sensor Telemetry</span>
+                        <span className="w-2 h-2 rounded-full bg-[#00D1FF] animate-ping shrink-0" />
+                      </div>
+                      <p className="text-[10px] text-neutral-400 font-mono truncate">Dynamic ESP32 · Multi-channel capture</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] font-mono font-bold text-neutral-300 bg-white/5 px-2 py-1 rounded-xl border border-white/10 hidden xs:inline">
+                      {readingBuffer.length} pkts
+                    </span>
+                    <span className="text-xs font-mono font-bold text-[#00D1FF] bg-[#00D1FF]/10 px-2.5 py-1 rounded-xl border border-[#00D1FF]/30 flex items-center gap-1">
+                      <Zap className="w-3 h-3 animate-pulse" />
+                      <span>{Math.max(1, Math.ceil(15 - (scanProgress / 100) * 15))}s</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Live Recharts graph frame */}
+                <div className="relative w-full rounded-2xl bg-[#07090C] border border-white/10 overflow-hidden shadow-inner p-2.5 sm:p-3">
+                  <div className="flex items-center justify-between text-[9px] font-mono text-neutral-400 uppercase tracking-wider px-1 mb-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-emerald-400 font-semibold">ESP32 STREAMING</span>
+                      <span className="text-neutral-600 hidden xs:inline">•</span>
+                      <span className="text-neutral-500 hidden xs:inline">15-SEC STABILIZATION</span>
+                    </div>
+                    <span className="text-[#00D1FF] font-medium">{scanProgress}% STABILIZED</span>
+                  </div>
+
+                  {/* Live sensor chart — color-coded pH/TDS/Turbidity/Temp lines */}
+                  <LiveSensorChart
+                    readingBuffer={readingBuffer}
+                    currentPh={activeBottleData?.ph}
+                    currentTds={activeBottleData?.tds}
+                    currentTurbidity={activeBottleData?.turbidity}
+                    currentTemp={activeBottleData?.temperature}
+                  />
+
+                  {/* Sensor legend badges */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-2 border-t border-white/5 mt-1">
+                    {[
+                      { label: 'pH', value: activeBottleData?.ph?.toFixed(2), color: '#00D1FF', bg: 'bg-[#00D1FF]/10', border: 'border-[#00D1FF]/25' },
+                      { label: 'TDS', value: activeBottleData?.tds != null ? `${activeBottleData.tds} ppm` : '--', color: '#818CF8', bg: 'bg-[#818CF8]/10', border: 'border-[#818CF8]/25' },
+                      { label: 'Clarity', value: activeBottleData?.turbidity != null ? `${activeBottleData.turbidity} NTU` : '--', color: '#F59E0B', bg: 'bg-amber-500/10', border: 'border-amber-500/25' },
+                      { label: 'Temp', value: activeBottleData?.temperature != null ? `${activeBottleData.temperature}°C` : '--', color: '#10B981', bg: 'bg-emerald-500/10', border: 'border-emerald-500/25' },
+                    ].map((s) => (
+                      <div key={s.label} className={`flex items-center justify-between p-1.5 rounded-xl ${s.bg} border ${s.border}`}>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                          <span className="text-[10px] text-neutral-400 font-mono">{s.label}</span>
+                        </div>
+                        <span className="text-xs font-bold font-mono" style={{ color: s.color }}>{s.value ?? '--'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Progress track */}
+                <div className="space-y-1.5">
+                  <div className="w-full bg-[#090B0E] h-2 rounded-full overflow-hidden border border-white/10 p-0.5">
+                    <motion.div
+                      className="bg-gradient-to-r from-[#00D1FF] via-[#818CF8] to-[#38BDF8] h-full rounded-full shadow-sm shadow-[#00D1FF]/50"
+                      style={{ width: `${scanProgress}%` }}
+                      transition={{ ease: 'linear' }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-neutral-400 font-mono px-0.5">
+                    <span className="flex items-center gap-1 text-[#00D1FF]">
+                      <Sparkles className="w-3 h-3" />
+                      <span>{scanProgress}% ({scanProgress >= 80 ? 'Harmonizing' : scanProgress >= 40 ? 'Calibrating' : 'Sampling'})</span>
+                    </span>
+                    <span className="text-neutral-500">{readingBuffer.length} samples buffered</span>
+                  </div>
+                </div>
               </motion.div>
             ) : analysisResult ? (
               /* STATE 2: After Analysis Completed (Verified Metrics Summary & Unlocked Report Action) */

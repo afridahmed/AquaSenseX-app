@@ -129,7 +129,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         {/* 6. Combined Bottle Water Level + Hydration Module */}
         <CombinedBottleHydrationCard
           waterLevel={bottle?.waterLevel ?? null}
-          maxCapacity={bottle?.maxCapacity ?? 750}
+          maxCapacity={bottle?.maxCapacity ?? 2000}
           todayConsumed={todayConsumed}
           hardwareConsumed={hardwareConsumed}
           manualConsumed={manualConsumed}

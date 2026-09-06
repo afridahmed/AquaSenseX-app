@@ -572,7 +572,7 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const simulateRefill = () => {
     if (!bottle || !bottle.bottleId) return;
     defaultSensorProvider.updateBottleState(bottle.bottleId, {
-      waterLevel: 750,
+      waterLevel: 100,
       temperature: 16.5,
       tds: 145,
       turbidity: 0.2,
