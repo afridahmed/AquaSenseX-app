@@ -9,7 +9,10 @@ import {
 } from '../../services/location/locationService';
 import { geocodingService } from '../../services/geocoding/geocodingService';
 import { createCommunityReport } from '../../services/community/communityService';
-import { CommunityReport } from '../../types';
+import { evaluateWaterQuality } from '../../services/waterQuality/qualityEvaluator';
+import { AnalysisResult } from '../dashboard/TestWaterActionCard';
+import { WaterAnalysisReportModal } from '../dashboard/WaterAnalysisReportModal';
+import { BottleData, CommunityReport } from '../../types';
 import L from 'leaflet';
 import {
   FlaskConical,
@@ -26,6 +29,12 @@ import {
   Eye,
   Activity,
   WifiOff,
+  RotateCw,
+  Sparkles,
+  Clock,
+  ShieldCheck,
+  FileText,
+  ArrowRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -218,6 +227,132 @@ export const CommunityReportMode: React.FC<CommunityReportModeProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitSuccess, setSubmitSuccess] = useState<boolean>(false);
 
+  // 15-second smartwatch sampling engine for Community Report Mode
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [scanProgress, setScanProgress] = useState<number>(0);
+  const [readingBuffer, setReadingBuffer] = useState<BottleData[]>([]);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
+
+  const readingBufferRef = useRef<BottleData[]>([]);
+  useEffect(() => {
+    readingBufferRef.current = readingBuffer;
+  }, [readingBuffer]);
+
+  useEffect(() => {
+    if (!isAnalyzing || !bottle) return;
+    setReadingBuffer((prev) => [...prev, bottle]);
+  }, [bottle, isAnalyzing]);
+
+  useEffect(() => {
+    if (!isDeviceOnline && isAnalyzing) {
+      setIsAnalyzing(false);
+      setScanProgress(0);
+      setReadingBuffer([]);
+    }
+  }, [isDeviceOnline, isAnalyzing]);
+
+  useEffect(() => {
+    if (!isAnalyzing) return;
+    const DURATION_MS = 15000;
+    const INTERVAL_MS = 100;
+    const startTime = Date.now();
+
+    const progressTimer = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(100, (elapsed / DURATION_MS) * 100);
+      setScanProgress(Math.round(progress));
+
+      if (elapsed >= DURATION_MS) {
+        clearInterval(progressTimer);
+        finalizeCommunityAnalysis();
+      }
+    }, INTERVAL_MS);
+
+    return () => {
+      clearInterval(progressTimer);
+    };
+  }, [isAnalyzing]);
+
+  const finalizeCommunityAnalysis = () => {
+    const samples =
+      readingBufferRef.current.length > 0
+        ? readingBufferRef.current
+        : bottle
+        ? [bottle]
+        : [];
+
+    const validPh = samples
+      .map((s) => s.ph)
+      .filter((v): v is number => typeof v === 'number' && !isNaN(v));
+    const validTds = samples
+      .map((s) => s.tds)
+      .filter((v): v is number => typeof v === 'number' && !isNaN(v));
+    const validTemp = samples
+      .map((s) => s.temperature)
+      .filter((v): v is number => typeof v === 'number' && !isNaN(v));
+    const validTurb = samples
+      .map((s) => s.turbidity)
+      .filter((v): v is number => typeof v === 'number' && !isNaN(v));
+
+    const avgPh = validPh.length
+      ? Number((validPh.reduce((a, b) => a + b, 0) / validPh.length).toFixed(2))
+      : (bottle?.ph ?? null);
+    const avgTds = validTds.length
+      ? Math.round(validTds.reduce((a, b) => a + b, 0) / validTds.length)
+      : (bottle?.tds ?? null);
+    const avgTemp = validTemp.length
+      ? Number((validTemp.reduce((a, b) => a + b, 0) / validTemp.length).toFixed(1))
+      : (bottle?.temperature ?? null);
+    const avgTurb = validTurb.length
+      ? Number((validTurb.reduce((a, b) => a + b, 0) / validTurb.length).toFixed(2))
+      : (bottle?.turbidity ?? null);
+
+    let qualityCategory = 'Optimal';
+    let qualityScore: number | null = null;
+
+    if (avgPh !== null || avgTds !== null || avgTurb !== null) {
+      const evaluation = evaluateWaterQuality({
+        ph: avgPh ?? 7.2,
+        tds: avgTds ?? 140,
+        turbidity: avgTurb ?? 0.3,
+        temperature: avgTemp ?? 20,
+      });
+      qualityCategory = evaluation.category;
+      qualityScore = evaluation.score;
+    }
+
+    const finalResult: AnalysisResult = {
+      ph: avgPh,
+      tds: avgTds,
+      temperature: avgTemp,
+      turbidity: avgTurb,
+      qualityScore,
+      qualityCategory,
+      sampleCount: Math.max(samples.length, 1),
+      timestamp: new Date().toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }),
+    };
+
+    setAnalysisResult(finalResult);
+    setIsAnalyzing(false);
+    setScanProgress(100);
+  };
+
+  const handleStartAnalysis = () => {
+    if (!isDeviceOnline) return;
+    setIsAnalyzing(true);
+    setScanProgress(0);
+    if (bottle) {
+      setReadingBuffer([bottle]);
+    } else {
+      setReadingBuffer([]);
+    }
+  };
+
   // Auto-acquire fresh GPS location upon entering Report mode
   useEffect(() => {
     acquireFreshLocation();
@@ -370,6 +505,12 @@ export const CommunityReportMode: React.FC<CommunityReportModeProps> = ({
 
     setIsSubmitting(true);
     try {
+      const verifiedPh = analysisResult?.ph ?? bottle?.ph ?? 7.2;
+      const verifiedTds = analysisResult?.tds ?? bottle?.tds ?? 150;
+      const verifiedTemp = analysisResult?.temperature ?? bottle?.temperature ?? 22.0;
+      const verifiedTurb = analysisResult?.turbidity ?? bottle?.turbidity ?? 0.35;
+      const verifiedScore = analysisResult?.qualityScore ?? qualityEval.score;
+
       const newReport = await createCommunityReport({
         uid: user.uid,
         bottleId: bottle?.bottleId || user.bottleId || '',
@@ -382,14 +523,14 @@ export const CommunityReportMode: React.FC<CommunityReportModeProps> = ({
         originalDeviceLon: deviceGps.lon,
         gpsAccuracy: deviceGps.accuracy,
         adjustmentDistanceMeters: distanceFromGpsMeters,
-        qualityScore: qualityEval.score,
-        temperature: bottle?.temperature || 21.0,
-        tds: bottle?.tds || 180,
-        turbidity: bottle?.turbidity || 0.4,
-        ph: bottle?.ph || 7.2,
+        qualityScore: verifiedScore,
+        temperature: verifiedTemp,
+        tds: verifiedTds,
+        turbidity: verifiedTurb,
+        ph: verifiedPh,
         verifiedReports: 1,
         userHasVerified: true,
-        notes: notes.trim() || 'Verified with AquaSense X optical & electrical sensor.',
+        notes: notes.trim() || (analysisResult ? `Verified 15-second stabilized analysis via ${bottle?.bottleId || 'AquaSense X'}.` : 'Verified with AquaSense X optical & electrical sensor.'),
       });
 
       setSubmitSuccess(true);
@@ -560,106 +701,268 @@ export const CommunityReportMode: React.FC<CommunityReportModeProps> = ({
 
         {/* Right Column: Sensor Telemetry & Report Details Form (6 cols on lg) */}
         <div className={`lg:col-span-6 bg-[#12161C] p-3.5 sm:p-5 rounded-2xl sm:rounded-[28px] border border-white/5 shadow-2xl flex flex-col justify-between space-y-4 transition-opacity ${!isDeviceOnline ? 'opacity-70' : ''}`}>
-          {/* Header */}
-          <div className="flex items-center justify-between pb-2.5 border-b border-white/10">
-            <div className="flex items-center gap-2.5">
-              <div
-                className={`w-8 h-8 rounded-xl border flex items-center justify-center ${
-                  isDeviceOnline
-                    ? 'bg-cyan-500/15 border-cyan-500/30 text-[#00D1FF]'
-                    : 'bg-white/5 border-white/10 text-neutral-500'
-                }`}
-              >
-                {isDeviceOnline ? <FlaskConical className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-white">
-                  {isDeviceOnline ? 'Live Sensor Readings' : 'Sensor Telemetry Offline'}
-                </h3>
-                <p className="text-[11px] text-neutral-400">
-                  {isDeviceOnline
-                    ? `Captured from ${bottle?.bottleId || 'AquaSense X'}`
-                    : 'Connect bottle to capture live sensor telemetry'}
-                </p>
-              </div>
-            </div>
+          {/* Header & Sensor Analysis Section */}
+          <div className="space-y-3 pb-3 border-b border-white/10">
+            <AnimatePresence mode="wait">
+              {isAnalyzing ? (
+                /* STATE 1: Sampling HUD */
+                <motion.div
+                  key="analyzing"
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  className="space-y-2.5"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-[#00D1FF]/15 border border-[#00D1FF]/30 text-[#00D1FF] flex items-center justify-center shrink-0">
+                        <Activity className="w-4 h-4 animate-spin text-[#00D1FF]" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs sm:text-sm font-semibold text-white truncate">
+                            Stabilizing sensor readings...
+                          </span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#00D1FF] animate-ping" />
+                        </div>
+                        <p className="text-[11px] text-neutral-400 truncate">
+                          Buffering optical and electrochemical packets
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-[#00D1FF] bg-[#00D1FF]/10 px-2 py-0.5 rounded-lg border border-[#00D1FF]/20 shrink-0">
+                      {Math.max(1, Math.ceil(15 - (scanProgress / 100) * 15))}s remaining
+                    </span>
+                  </div>
 
-            {/* Quality Badge */}
-            <div className="text-right">
-              {isDeviceOnline ? (
-                <>
-                  <span className="text-xl font-light text-white font-sans">{qualityEval.score}</span>
-                  <span className="text-[10px] text-neutral-400 font-mono">/100</span>
-                  <span
-                    className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border block mt-0.5 ${
-                      qualityEval.score >= 88
-                        ? 'text-[#00D1FF] border-[#00D1FF]/30 bg-[#00D1FF]/10'
-                        : qualityEval.score >= 70
-                        ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
-                        : 'text-amber-300 border-amber-500/30 bg-amber-500/10'
-                    }`}
-                  >
-                    {qualityEval.score >= 88 ? 'Excellent' : qualityEval.score >= 70 ? 'Good' : 'Caution'}
-                  </span>
-                </>
+                  {/* Progress Bar */}
+                  <div className="w-full bg-[#090B0E] h-2 rounded-full overflow-hidden border border-white/10 p-0.5">
+                    <motion.div
+                      className="bg-gradient-to-r from-[#00D1FF] via-[#00E5FF] to-[#38BDF8] h-full rounded-full"
+                      style={{ width: `${scanProgress}%` }}
+                      transition={{ ease: 'linear' }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-neutral-400 font-mono">
+                    <span className="flex items-center gap-1 text-[#00D1FF]">
+                      <Sparkles className="w-3 h-3" />
+                      <span>{scanProgress}% stabilized</span>
+                    </span>
+                    <span>{readingBuffer.length} packets buffered</span>
+                  </div>
+                </motion.div>
+              ) : analysisResult ? (
+                /* STATE 2: Verified Analysis Averages Display */
+                <motion.div
+                  key="analyzed"
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  className="space-y-3"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-1">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-[#00D1FF]/15 border border-[#00D1FF]/30 text-[#00D1FF] flex items-center justify-center shrink-0">
+                        <ShieldCheck className="w-4.5 h-4.5 text-[#00D1FF]" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs sm:text-sm font-bold text-white">
+                            Verified Analysis
+                          </span>
+                          <span
+                            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+                              (analysisResult.qualityScore ?? 0) >= 88
+                                ? 'bg-[#00D1FF]/15 text-[#00D1FF] border-[#00D1FF]/30'
+                                : (analysisResult.qualityScore ?? 0) >= 70
+                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                            }`}
+                          >
+                            {analysisResult.qualityScore !== null ? `${analysisResult.qualityScore}/100 · ` : ''}
+                            {analysisResult.qualityCategory || 'Optimal'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 text-[10px] text-neutral-400 font-mono mt-0.5">
+                          <Clock className="w-2.5 h-2.5 text-neutral-500 shrink-0" />
+                          <span>Sampled at {analysisResult.timestamp} (15s avg)</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                      <button
+                        type="button"
+                        onClick={handleStartAnalysis}
+                        disabled={!isDeviceOnline}
+                        title="Re-run 15s analysis"
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 border border-white/10 text-xs font-medium cursor-pointer"
+                      >
+                        <RotateCw className="w-3 h-3" />
+                        <span>Re-analyze</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsReportModalOpen(true)}
+                        className="flex items-center gap-1 px-3 py-1 rounded-xl bg-[#00D1FF] hover:bg-[#00B4D8] text-[#090B0E] text-xs font-semibold shadow-sm cursor-pointer"
+                      >
+                        <FileText className="w-3 h-3" />
+                        <span>Report</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 4 Sensor Verified Averages Grid */}
+                  <div className="grid grid-cols-4 gap-1.5 sm:gap-2 text-center text-xs p-2 rounded-xl bg-[#090B0E] border border-white/5">
+                    <div className="p-1.5 rounded-lg bg-white/[0.02]">
+                      <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 mb-0.5">
+                        <Activity className="w-3 h-3 text-[#00D1FF]" />
+                        <span className="font-mono">Avg pH</span>
+                      </div>
+                      <span className="font-semibold text-white text-sm font-mono">
+                        {analysisResult.ph !== null ? analysisResult.ph : '--'}
+                      </span>
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-white/[0.02]">
+                      <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 mb-0.5">
+                        <Droplets className="w-3 h-3 text-cyan-400" />
+                        <span className="font-mono">Avg TDS</span>
+                      </div>
+                      <span className="font-semibold text-white text-sm font-mono">
+                        {analysisResult.tds !== null ? (
+                          <>
+                            {analysisResult.tds} <span className="text-[9px] font-normal text-neutral-400">ppm</span>
+                          </>
+                        ) : (
+                          '--'
+                        )}
+                      </span>
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-white/[0.02]">
+                      <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 mb-0.5">
+                        <Eye className="w-3 h-3 text-amber-400" />
+                        <span className="font-mono">Avg Turb</span>
+                      </div>
+                      <span className="font-semibold text-white text-sm font-mono">
+                        {analysisResult.turbidity !== null ? (
+                          <>
+                            {analysisResult.turbidity} <span className="text-[9px] font-normal text-neutral-400">NTU</span>
+                          </>
+                        ) : (
+                          '--'
+                        )}
+                      </span>
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-white/[0.02]">
+                      <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 mb-0.5">
+                        <Thermometer className="w-3 h-3 text-emerald-400" />
+                        <span className="font-mono">Avg Temp</span>
+                      </div>
+                      <span className="font-semibold text-white text-sm font-mono">
+                        {analysisResult.temperature !== null ? `${analysisResult.temperature}°C` : '--'}
+                      </span>
+                    </div>
+                  </div>
+                </motion.div>
               ) : (
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-neutral-800 text-neutral-400 border border-neutral-700 block">
-                  Offline · --
-                </span>
-              )}
-            </div>
-          </div>
+                /* STATE 3: Idle / Live Pre-Analysis State */
+                <motion.div
+                  key="idle"
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  className="space-y-2.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className={`w-8 h-8 rounded-xl border flex items-center justify-center ${
+                          isDeviceOnline
+                            ? 'bg-cyan-500/15 border-cyan-500/30 text-[#00D1FF]'
+                            : 'bg-white/5 border-white/10 text-neutral-500'
+                        }`}
+                      >
+                        {isDeviceOnline ? <FlaskConical className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-semibold text-white">
+                          {isDeviceOnline ? 'Sensor Telemetry' : 'Device Offline'}
+                        </h3>
+                        <p className="text-[11px] text-neutral-400">
+                          {isDeviceOnline
+                            ? `Connected to ${bottle?.bottleId || 'AquaSense X'}`
+                            : 'Power on bottle to capture telemetry'}
+                        </p>
+                      </div>
+                    </div>
 
-          {/* 4 Sensor Metrics Grid */}
-          <div className="grid grid-cols-4 gap-1.5 sm:gap-2 text-center text-xs p-2.5 rounded-xl bg-[#090B0E] border border-white/5">
-            <div className="p-1.5 rounded-lg bg-white/[0.02]">
-              <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 mb-0.5">
-                <Activity className={`w-3 h-3 ${isDeviceOnline ? 'text-[#00D1FF]' : 'text-neutral-500'}`} />
-                <span className="font-mono">pH</span>
-              </div>
-              <span className="font-semibold text-white text-sm">
-                {isDeviceOnline && bottle?.ph != null ? bottle.ph : '--'}
-              </span>
-            </div>
-            <div className="p-1.5 rounded-lg bg-white/[0.02]">
-              <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 mb-0.5">
-                <Droplets className={`w-3 h-3 ${isDeviceOnline ? 'text-cyan-400' : 'text-neutral-500'}`} />
-                <span className="font-mono">TDS</span>
-              </div>
-              <span className="font-semibold text-white text-sm">
-                {isDeviceOnline && bottle?.tds != null ? (
-                  <>
-                    {bottle.tds} <span className="text-[9px] font-normal text-neutral-400">ppm</span>
-                  </>
-                ) : (
-                  '--'
-                )}
-              </span>
-            </div>
-            <div className="p-1.5 rounded-lg bg-white/[0.02]">
-              <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 mb-0.5">
-                <Eye className={`w-3 h-3 ${isDeviceOnline ? 'text-amber-400' : 'text-neutral-500'}`} />
-                <span className="font-mono">CLARITY</span>
-              </div>
-              <span className="font-semibold text-white text-sm">
-                {isDeviceOnline && bottle?.turbidity != null ? (
-                  <>
-                    {bottle.turbidity} <span className="text-[9px] font-normal text-neutral-400">NTU</span>
-                  </>
-                ) : (
-                  '--'
-                )}
-              </span>
-            </div>
-            <div className="p-1.5 rounded-lg bg-white/[0.02]">
-              <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 mb-0.5">
-                <Thermometer className={`w-3 h-3 ${isDeviceOnline ? 'text-emerald-400' : 'text-neutral-500'}`} />
-                <span className="font-mono">TEMP</span>
-              </div>
-              <span className="font-semibold text-white text-sm">
-                {isDeviceOnline && bottle?.temperature != null ? `${bottle.temperature}°C` : '--'}
-              </span>
-            </div>
+                    {isDeviceOnline && (
+                      <button
+                        type="button"
+                        onClick={handleStartAnalysis}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#00D1FF] hover:bg-[#00B4D8] text-[#090B0E] text-xs font-semibold shadow-sm cursor-pointer transition-all active:scale-98"
+                      >
+                        <Activity className="w-3.5 h-3.5" />
+                        <span>Analyze Water</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 4 Sensor Metrics Preview Grid */}
+                  <div className="grid grid-cols-4 gap-1.5 sm:gap-2 text-center text-xs p-2.5 rounded-xl bg-[#090B0E] border border-white/5">
+                    <div className="p-1.5 rounded-lg bg-white/[0.02]">
+                      <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 mb-0.5">
+                        <Activity className={`w-3 h-3 ${isDeviceOnline ? 'text-[#00D1FF]' : 'text-neutral-500'}`} />
+                        <span className="font-mono">pH</span>
+                      </div>
+                      <span className="font-semibold text-white text-sm">
+                        {isDeviceOnline && bottle?.ph != null ? bottle.ph : '--'}
+                      </span>
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-white/[0.02]">
+                      <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 mb-0.5">
+                        <Droplets className={`w-3 h-3 ${isDeviceOnline ? 'text-cyan-400' : 'text-neutral-500'}`} />
+                        <span className="font-mono">TDS</span>
+                      </div>
+                      <span className="font-semibold text-white text-sm">
+                        {isDeviceOnline && bottle?.tds != null ? (
+                          <>
+                            {bottle.tds} <span className="text-[9px] font-normal text-neutral-400">ppm</span>
+                          </>
+                        ) : (
+                          '--'
+                        )}
+                      </span>
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-white/[0.02]">
+                      <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 mb-0.5">
+                        <Eye className={`w-3 h-3 ${isDeviceOnline ? 'text-amber-400' : 'text-neutral-500'}`} />
+                        <span className="font-mono">CLARITY</span>
+                      </div>
+                      <span className="font-semibold text-white text-sm">
+                        {isDeviceOnline && bottle?.turbidity != null ? (
+                          <>
+                            {bottle.turbidity} <span className="text-[9px] font-normal text-neutral-400">NTU</span>
+                          </>
+                        ) : (
+                          '--'
+                        )}
+                      </span>
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-white/[0.02]">
+                      <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 mb-0.5">
+                        <Thermometer className={`w-3 h-3 ${isDeviceOnline ? 'text-emerald-400' : 'text-neutral-500'}`} />
+                        <span className="font-mono">TEMP</span>
+                      </div>
+                      <span className="font-semibold text-white text-sm">
+                        {isDeviceOnline && bottle?.temperature != null ? `${bottle.temperature}°C` : '--'}
+                      </span>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Form */}
@@ -754,6 +1057,15 @@ export const CommunityReportMode: React.FC<CommunityReportModeProps> = ({
           </form>
         </div>
       </div>
+
+      {/* Water Quality Report Modal synchronization */}
+      <WaterAnalysisReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        analysisResult={analysisResult}
+        bottleId={bottle?.bottleId}
+        onSuccessPublish={onSuccessPublish}
+      />
     </div>
   );
 };

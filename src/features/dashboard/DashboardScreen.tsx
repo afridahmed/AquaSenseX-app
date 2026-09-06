@@ -7,7 +7,6 @@ import { SensorTelemetryGrid } from './SensorTelemetryGrid';
 import { AISensorInsightBanner } from './AISensorInsightBanner';
 import { TestWaterActionCard } from './TestWaterActionCard';
 import { CombinedBottleHydrationCard } from './CombinedBottleHydrationCard';
-import { UnknownSourceTestModal } from './UnknownSourceTestModal';
 import { X, Droplets } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { NavTab, CommunityReport } from '../../types';
@@ -38,9 +37,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   } = useBottle();
 
   const { user } = useAuth();
-
-  // Test & Report modal for unknown water sources
-  const [isTestModalOpen, setIsTestModalOpen] = useState<boolean>(false);
 
   // Custom drink log modal
   const [isCustomDrinkOpen, setIsCustomDrinkOpen] = useState<boolean>(false);
@@ -118,8 +114,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
         {/* 5. Test & Report Water (Directly after Sensor Reading Grid) */}
         <TestWaterActionCard
-          onOpenTestModal={() => setIsTestModalOpen(true)}
           online={isDeviceOnline}
+          onSuccessPublish={(report) => {
+            if (onPublishToCommunity) {
+              onPublishToCommunity(report);
+            } else if (onNavigateToTab) {
+              onNavigateToTab('community');
+            }
+          }}
         />
 
         {/* 6. Combined Bottle Water Level + Hydration Module */}
@@ -136,19 +138,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           onRefill={simulateRefill}
         />
       </div>
-
-      {/* Unknown Water Source Test & Report Flow Modal */}
-      <UnknownSourceTestModal
-        isOpen={isTestModalOpen}
-        onClose={() => setIsTestModalOpen(false)}
-        onSuccessPublish={(report) => {
-          if (onPublishToCommunity) {
-            onPublishToCommunity(report);
-          } else if (onNavigateToTab) {
-            onNavigateToTab('community');
-          }
-        }}
-      />
 
       {/* Custom Drink Intake Modal */}
       <AnimatePresence>
