@@ -11,6 +11,7 @@
     "clean": "rm -rf dist server.js",
     "seed:bottles": "node seed_bottles.mjs",
     "setup:prod-bottle": "node setup_production_bottle.mjs",
+    "reset:prod-bottle": "node reset_prod_01.mjs",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

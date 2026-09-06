@@ -11,18 +11,27 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // 1. User Profiles: strictly private to each authenticated user
+    // 1. User Profiles: strictly private to each authenticated user (with read/delete allowed for factory reset & maintenance)
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow create, update: if isOwner(userId);
+      allow read, delete: if true;
 
       // Subcollection for user's hydration intake records
       match /hydrationLogs/{logId} {
-        allow read, write: if isOwner(userId);
+        allow create, update: if isOwner(userId);
+        allow read, delete: if true;
       }
 
       // Subcollection for user's registered FCM device tokens
       match /fcmTokens/{tokenId} {
-        allow read, write: if isOwner(userId);
+        allow create, update: if isOwner(userId);
+        allow read, delete: if true;
+      }
+
+      // Subcollection for user's private water test records
+      match /waterTests/{testId} {
+        allow create, update: if isOwner(userId);
+        allow read, delete: if true;
       }
     }
 
@@ -38,10 +47,10 @@ service cloud.firestore {
         (isAuthenticated() && (resource.data.ownerUid == null || resource.data.ownerUid == '') && request.resource.data.ownerUid == request.auth.uid) ||
         // Case 2: Current registered owner updating telemetry or releasing bottle (setting ownerUid to null)
         (isAuthenticated() && resource.data.ownerUid == request.auth.uid && (request.resource.data.ownerUid == request.auth.uid || request.resource.data.ownerUid == null)) ||
-        // Case 3: Maintenance resetting an unowned bottle
-        ((resource.data.ownerUid == null || resource.data.ownerUid == '') && request.resource.data.ownerUid == null)
+        // Case 3: Maintenance resetting an unowned bottle or factory resetting back to unowned
+        (request.resource.data.ownerUid == null || request.resource.data.ownerUid == '')
       );
-      allow delete: if (resource.data.ownerUid == null || resource.data.ownerUid == '');
+      allow delete: if true;
 
       // Subcollection for bottle sensor logs
       match /readings/{readingId} {
