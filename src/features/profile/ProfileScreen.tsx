@@ -28,13 +28,14 @@ import {
   Clock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { formatBottleId } from '../pairing/BottlePairingScreen';
 
 interface ProfileScreenProps {
   onChangeBottle: () => void;
 }
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) => {
-  const { user, firebaseUser, signOut, deleteAccount, updateUserProfile, unpairBottle } = useAuth();
+  const { user, firebaseUser, signOut, deleteAccount, updateUserProfile, unpairBottle, pairBottle } = useAuth();
   const { bottle, hydrationGoal, updateHydrationGoal } = useBottle();
   const { theme, toggleTheme } = useTheme();
 
@@ -42,6 +43,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
   const [isSavedGoal, setIsSavedGoal] = useState<boolean>(false);
   const [isChangeBottleModalOpen, setIsChangeBottleModalOpen] = useState<boolean>(false);
   const [changeBottleError, setChangeBottleError] = useState<string>('');
+  const [newBottleInput, setNewBottleInput] = useState<string>('');
+  const [isPairingNewBottle, setIsPairingNewBottle] = useState<boolean>(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState<boolean>(false);
   const [deletePassword, setDeletePassword] = useState<string>('');
@@ -232,6 +235,33 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
     setTimeout(() => setNotificationToast(''), 4500);
   };
 
+  // Handle new bottle ID input with automatic uppercase, masking & hyphen insertion
+  const handleNewBottleInputChange = (val: string) => {
+    const formatted = formatBottleId(val, newBottleInput);
+    setNewBottleInput(formatted);
+    setChangeBottleError('');
+  };
+
+  const handlePairNewBottle = async () => {
+    const cleanId = newBottleInput.trim().toUpperCase();
+    if (!cleanId || cleanId.length < 3) {
+      setChangeBottleError('Please enter a valid identifier printed on your AquaSense X device.');
+      return;
+    }
+
+    setChangeBottleError('');
+    setIsPairingNewBottle(true);
+    try {
+      await pairBottle(cleanId);
+      setIsChangeBottleModalOpen(false);
+      setNewBottleInput('');
+    } catch (err: any) {
+      setChangeBottleError(err.message || 'Failed to link new bottle. Please try again.');
+    } finally {
+      setIsPairingNewBottle(false);
+    }
+  };
+
   return (
     <div className="min-h-full bg-[#090B0E] text-[#F8FAFC] flex flex-col transition-colors duration-200">
       <Header
@@ -299,8 +329,12 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
             <button
               id="btn-change-bottle"
               type="button"
-              onClick={() => onChangeBottle()}
-              disabled={isReleasingBottle}
+              onClick={() => {
+                setNewBottleInput('');
+                setChangeBottleError('');
+                setIsChangeBottleModalOpen(true);
+              }}
+              disabled={isReleasingBottle || isPairingNewBottle}
               className="flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-[#00D1FF]/10 hover:bg-[#00D1FF]/20 text-[#00D1FF] border border-[#00D1FF]/30 hover:border-[#00D1FF]/50 text-xs font-semibold transition-all shadow-sm touch-target sm:min-h-0 sm:min-w-0 cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -648,9 +682,36 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
                 </span>
               </div>
 
-              <p className="text-xs text-neutral-300 leading-relaxed">
-                Confirming will atomically release this bottle from your profile so you can pair another registered AquaSense X device. Your hydration history and personal profile will remain preserved.
-              </p>
+              {/* New Bottle ID Input with auto-masking, uppercase, and subtle cyan focus ring */}
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="input-change-bottle-serial" className="block text-xs font-medium text-neutral-400">
+                    New Bottle Serial ID
+                  </label>
+                  <span className="text-[10px] font-mono text-neutral-500">
+                    Format: ASX-PROD-01
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    id="input-change-bottle-serial"
+                    type="text"
+                    value={newBottleInput}
+                    onChange={(e) => handleNewBottleInputChange(e.target.value)}
+                    placeholder="e.g., ASX-PROD-01"
+                    maxLength={11}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    className="w-full bg-[#090B0E] border border-white/10 rounded-2xl px-4 py-3 text-sm font-mono text-center tracking-wider xs:tracking-widest text-[#00D1FF] placeholder-neutral-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 transition-all uppercase"
+                  />
+                </div>
+                <div className="flex items-center justify-between px-1 text-[11px] text-neutral-500 font-mono">
+                  <span>Auto-formatted</span>
+                  <span>11 chars max</span>
+                </div>
+              </div>
 
               {changeBottleError && (
                 <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
@@ -662,18 +723,38 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
               <div className="flex items-center justify-end gap-2.5 pt-2">
                 <button
                   type="button"
-                  disabled={isReleasingBottle}
+                  disabled={isReleasingBottle || isPairingNewBottle}
                   onClick={() => {
                     setIsChangeBottleModalOpen(false);
                     setChangeBottleError('');
+                    setNewBottleInput('');
                   }}
-                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-medium text-neutral-300 hover:text-white bg-white/[0.04] disabled:opacity-50 touch-target"
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-medium text-neutral-300 hover:text-white bg-white/[0.04] disabled:opacity-50 touch-target cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  disabled={isReleasingBottle}
+                  id="btn-confirm-pair-new-bottle"
+                  disabled={isReleasingBottle || isPairingNewBottle || newBottleInput.trim().length < 3}
+                  onClick={handlePairNewBottle}
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-[#00D1FF] hover:bg-[#00B4D8] text-[#090B0E] text-xs font-semibold transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-lg shadow-[#00D1FF]/20 touch-target cursor-pointer disabled:cursor-not-allowed"
+                >
+                  {isPairingNewBottle ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-[#090B0E]" />
+                      <span>Pairing...</span>
+                    </>
+                  ) : (
+                    <span>Pair New Bottle</span>
+                  )}
+                </button>
+              </div>
+
+              <div className="pt-2 border-t border-white/5 text-center">
+                <button
+                  type="button"
+                  disabled={isReleasingBottle || isPairingNewBottle}
                   onClick={async () => {
                     setChangeBottleError('');
                     setIsReleasingBottle(true);
@@ -687,16 +768,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onChangeBottle }) 
                       setIsReleasingBottle(false);
                     }
                   }}
-                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-[#00D1FF] hover:bg-[#00B4D8] text-[#090B0E] text-xs font-semibold transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-lg shadow-[#00D1FF]/20 touch-target"
+                  className="text-[11px] text-neutral-400 hover:text-[#00D1FF] transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  {isReleasingBottle ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Releasing...</span>
-                    </>
-                  ) : (
-                    <span>Confirm & Change</span>
-                  )}
+                  Or release current bottle and launch pairing wizard &rarr;
                 </button>
               </div>
             </motion.div>

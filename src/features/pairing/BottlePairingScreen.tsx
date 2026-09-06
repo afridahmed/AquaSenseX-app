@@ -25,34 +25,30 @@ interface BottlePairingScreenProps {
  * - Automatically inserts hyphen after 3rd character (ASX -> ASX-).
  * - Automatically inserts hyphen after 7th character (ASX-PROD -> ASX-PROD-).
  * - Enforces maximum length of 11 characters (9 alphanumeric characters + 2 hyphens).
+ * - Smooth Backspace Handling: Automatically cleans up trailing hyphens when deleting.
  */
-export const formatBottleId = (rawInput: string, isDeleting = false): string => {
-  // Strip non-alphanumeric characters and convert to uppercase (capped at 9 chars)
-  const clean = rawInput.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 9);
+export const formatBottleId = (rawInput: string, prevValue: string = ''): string => {
+  let clean = rawInput.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 9);
+  const isDeleting = rawInput.length < prevValue.length;
 
-  if (!clean) return '';
-
-  if (clean.length < 3) {
-    return clean;
+  // If user hit backspace while on a trailing hyphen (e.g., deleting '-' from 'ASX-')
+  if (isDeleting && prevValue.endsWith('-') && rawInput === prevValue.slice(0, -1)) {
+    clean = clean.slice(0, -1);
   }
 
-  // Automatically insert first hyphen after 3rd character (e.g. ASX -> ASX-)
+  if (!clean) return '';
+  if (clean.length < 3) return clean;
   if (clean.length === 3) {
     return isDeleting ? clean : `${clean}-`;
   }
-
   if (clean.length < 7) {
     return `${clean.slice(0, 3)}-${clean.slice(3)}`;
   }
-
-  // Automatically insert second hyphen after 7th character (e.g. ASX-PROD -> ASX-PROD-)
   if (clean.length === 7) {
     return isDeleting
       ? `${clean.slice(0, 3)}-${clean.slice(3)}`
       : `${clean.slice(0, 3)}-${clean.slice(3)}-`;
   }
-
-  // Full target format: XXX-XXXX-XX (max 11 characters, e.g. ASX-PROD-01)
   return `${clean.slice(0, 3)}-${clean.slice(3, 7)}-${clean.slice(7, 9)}`;
 };
 
@@ -69,18 +65,7 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
 
   // Handle bottle ID input with automatic uppercase, masking & hyphen insertion
   const handleBottleIdChange = (val: string) => {
-    const isDeleting = val.length < bottleInput.length;
-
-    let cleanRaw: string;
-    // Smooth backspace handling: if deleting and a trailing hyphen was removed,
-    // automatically strip the preceding character as well
-    if (isDeleting && bottleInput.endsWith('-') && val === bottleInput.slice(0, -1)) {
-      cleanRaw = bottleInput.replace(/[^A-Z0-9]/g, '').slice(0, -1);
-    } else {
-      cleanRaw = val.replace(/[^A-Z0-9]/g, '');
-    }
-
-    const formatted = formatBottleId(cleanRaw, isDeleting);
+    const formatted = formatBottleId(val, bottleInput);
     setBottleInput(formatted);
     setStatus('idle');
     setErrorMessage('');
@@ -88,25 +73,6 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
 
   // Backwards compatibility alias
   const handleInputChange = handleBottleIdChange;
-
-  // Intercept Backspace on trailing hyphen for smooth deletion
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace') {
-      const input = e.currentTarget;
-      if (
-        input.selectionStart === input.selectionEnd &&
-        input.selectionStart === bottleInput.length &&
-        bottleInput.endsWith('-')
-      ) {
-        e.preventDefault();
-        const cleanRaw = bottleInput.replace(/[^A-Z0-9]/g, '').slice(0, -1);
-        const formatted = formatBottleId(cleanRaw, true);
-        setBottleInput(formatted);
-        setStatus('idle');
-        setErrorMessage('');
-      }
-    }
-  };
 
   const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -298,26 +264,18 @@ export const BottlePairingScreen: React.FC<BottlePairingScreenProps> = ({
                 required
                 value={bottleInput}
                 onChange={(e) => handleBottleIdChange(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="ASX-PROD-01"
+                placeholder="e.g., ASX-PROD-01"
                 maxLength={11}
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="characters"
                 spellCheck={false}
-                className="w-full bg-[#090B0E] border border-white/10 rounded-2xl px-3.5 xs:px-4 py-3 text-sm sm:text-base font-mono text-center tracking-wider xs:tracking-widest text-[#00D1FF] placeholder-neutral-600 focus:outline-none focus:border-[#00D1FF]/50 transition-colors uppercase"
+                className="w-full bg-[#090B0E] border border-white/10 rounded-2xl px-4 py-3 text-sm sm:text-base font-mono text-center tracking-wider xs:tracking-widest text-[#00D1FF] placeholder-neutral-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 transition-all uppercase"
               />
             </div>
             <div className="flex items-center justify-between mt-2 px-1 text-[11px] text-neutral-500 font-mono">
-              <span>Auto-masked (11 chars max)</span>
-              <button
-                id="btn-use-prod-bottle"
-                type="button"
-                onClick={() => handleBottleIdChange('ASXPROD01')}
-                className="text-[#00D1FF]/80 hover:text-[#00D1FF] transition-colors cursor-pointer underline underline-offset-2 decoration-[#00D1FF]/40"
-              >
-                Use ASX-PROD-01
-              </button>
+              <span>Auto-formatted</span>
+              <span>11 chars max</span>
             </div>
           </div>
 
