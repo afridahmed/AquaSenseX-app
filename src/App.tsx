@@ -12,9 +12,11 @@ import { ProfileScreen } from './features/profile/ProfileScreen';
 import { AppLayout } from './components/layout/AppLayout';
 import { NavTab } from './types';
 import { notificationService } from './services/notifications/notificationService';
+import { InAppToastContainer } from './components/notifications/InAppToastContainer';
 
 const MainAppContent: React.FC = () => {
   const { user, loading, isPairingModalOpen, setIsPairingModalOpen } = useAuth();
+  const { toasts, dismissToast } = useBottle();
   const [splashFinished, setSplashFinished] = useState<boolean>(false);
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
@@ -121,9 +123,12 @@ const MainAppContent: React.FC = () => {
   };
 
   return (
-    <AppLayout currentTab={currentTab} onSelectTab={setCurrentTab}>
-      {renderTabContent()}
-    </AppLayout>
+    <>
+      <InAppToastContainer toasts={toasts} onDismiss={dismissToast} />
+      <AppLayout currentTab={currentTab} onSelectTab={setCurrentTab}>
+        {renderTabContent()}
+      </AppLayout>
+    </>
   );
 };
 
