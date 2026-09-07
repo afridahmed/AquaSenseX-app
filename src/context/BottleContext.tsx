@@ -15,6 +15,8 @@ import {
   orderBy,
   limit,
   serverTimestamp,
+  getDocs,
+  writeBatch,
 } from 'firebase/firestore';
 
 export interface AlertNotificationParams {
@@ -30,13 +32,18 @@ interface BottleContextType {
   qualityEval: WaterQualityEvaluation;
   hydrationLogs: HydrationLog[];
   todayConsumed: number;
+  dailyHydrationTotal: number;
   hardwareConsumed: number;
   manualConsumed: number;
   hydrationGoal: number;
   hydrationPercent: number;
   remainingMl: number;
+  physicalWaterLevel: number | null;
+  virtualWaterLevel: number | null;
   trackingMode: TrackingMode;
   setTrackingMode: (mode: TrackingMode) => Promise<void>;
+  resetDailyHydration: () => Promise<void>;
+  resetProgress: () => Promise<void>;
   aiTip: string;
   isStale: boolean;
   isOnline: boolean;
@@ -84,9 +91,46 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     return user?.trackingMode || 'smart_sync';
   });
 
+  // Ref to track physical bottle water level changes across snapshots
+  const prevPhysicalLevelMlRef = useRef<number | null>(null);
+
+  // Strictly read-only from Firestore / ESP32 ToF sensor
+  // The ESP32 ToF sensor reports waterLevel as a 0-100 percentage.
+  // Physical bottle capacity is 2000 ml (2L), so 10% drop = 200 ml consumed.
+  const physicalWaterLevel = useMemo(() => {
+    if (!bottle || bottle.waterLevel === null || bottle.waterLevel === undefined) return null;
+    const maxCap = bottle.maxCapacity || 2000; // Default: 2L physical bottle
+    if (bottle.waterLevel <= 100 && maxCap > 100) {
+      return Math.round((bottle.waterLevel / 100) * maxCap);
+    }
+    return Math.round(bottle.waterLevel);
+  }, [bottle?.waterLevel, bottle?.maxCapacity]);
+
+  // Virtual water level used exclusively to render the bottle UI
+  const [virtualWaterLevel, setVirtualWaterLevel] = useState<number | null>(null);
+
+  // Smart Sync Mode: virtualWaterLevel strictly mirrors physicalWaterLevel in real-time
+  useEffect(() => {
+    if (trackingMode === 'smart_sync') {
+      setVirtualWaterLevel(physicalWaterLevel);
+    }
+  }, [trackingMode, physicalWaterLevel]);
+
   const setTrackingMode = useCallback(
     async (mode: TrackingMode) => {
       setTrackingModeState(mode);
+
+      if (mode === 'manual') {
+        // Freeze virtualWaterLevel at the last known physicalWaterLevel
+        setVirtualWaterLevel((prev) => (prev !== null ? prev : (physicalWaterLevel ?? 2000)));
+      } else if (mode === 'smart_sync') {
+        // Re-sync virtualWaterLevel to physicalWaterLevel & reset delta baseline
+        if (physicalWaterLevel !== null) {
+          setVirtualWaterLevel(physicalWaterLevel);
+          prevPhysicalLevelMlRef.current = physicalWaterLevel;
+        }
+      }
+
       try {
         localStorage.setItem(TRACKING_MODE_STORAGE_KEY, mode);
       } catch (e) {
@@ -100,7 +144,7 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         }
       }
     },
-    [user, updateUserProfile]
+    [user, updateUserProfile, physicalWaterLevel]
   );
 
   useEffect(() => {
@@ -141,6 +185,8 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   useEffect(() => {
     if (!user) {
       setBottle(null);
+      setVirtualWaterLevel(null);
+      prevPhysicalLevelMlRef.current = null;
       setHydrationLogs([]);
       setIsHardwareTimedOut(false);
       setIsSimulatorOpen(false);
@@ -267,35 +313,20 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
   }, [bottleId]);
 
-  // Ref to track physical bottle water level changes across snapshots
-  const prevPhysicalLevelMlRef = useRef<number | null>(null);
-
-  // Normalize live bottle water level to milliliters.
-  // The ESP32 ToF sensor reports waterLevel as a 0-100 percentage.
-  // Physical bottle capacity is 2000 ml (2L), so 10% drop = 200 ml consumed.
-  const currentPhysicalLevelMl = useMemo(() => {
-    if (!bottle || bottle.waterLevel === null || bottle.waterLevel === undefined) return null;
-    const maxCap = bottle.maxCapacity || 2000; // Default: 2L physical bottle
-    if (bottle.waterLevel <= 100 && maxCap > 100) {
-      return Math.round((bottle.waterLevel / 100) * maxCap);
-    }
-    return Math.round(bottle.waterLevel);
-  }, [bottle?.waterLevel, bottle?.maxCapacity]);
-
   // Monitor physical bottle water level drop to record hardware-synced consumption
   useEffect(() => {
-    if (currentPhysicalLevelMl === null || !user) {
+    if (physicalWaterLevel === null || !user) {
       return;
     }
 
     if (prevPhysicalLevelMlRef.current === null) {
       // First baseline reading
-      prevPhysicalLevelMlRef.current = currentPhysicalLevelMl;
+      prevPhysicalLevelMlRef.current = physicalWaterLevel;
       return;
     }
 
     const prev = prevPhysicalLevelMlRef.current;
-    const drop = prev - currentPhysicalLevelMl;
+    const drop = prev - physicalWaterLevel;
 
     // A drop in water level (>= 15 ml to ignore ToF micro-jitter) indicates fluid drunk from physical smart bottle
     if (drop >= 15) {
@@ -305,12 +336,15 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         recordIntake(drop, 'bottle_auto', 'Detected from Smart Bottle ToF sensor');
       }
       // Always sync baseline so toggling modes does not trigger phantom delta spikes
-      prevPhysicalLevelMlRef.current = currentPhysicalLevelMl;
+      prevPhysicalLevelMlRef.current = physicalWaterLevel;
     } else if (drop < -15) {
-      // Refill detected (water level increased): ignore consumption and sync baseline
-      prevPhysicalLevelMlRef.current = currentPhysicalLevelMl;
+      // Refill detected (water level increased): sync baseline and mirror virtual level if in smart_sync
+      prevPhysicalLevelMlRef.current = physicalWaterLevel;
+      if (trackingMode === 'smart_sync') {
+        setVirtualWaterLevel(physicalWaterLevel);
+      }
     }
-  }, [currentPhysicalLevelMl, user, trackingMode]);
+  }, [physicalWaterLevel, user, trackingMode]);
 
   // Calculate today's consumed total (matching today's date in local ISO string)
   const todayDateStr = new Date().toISOString().slice(0, 10);
@@ -701,21 +735,20 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       console.error('Error saving hydration log to Firestore:', err);
     }
 
-    // Deduct fluid from bottle in Firestore only for manual additions (not hardware auto-detected drops)
-    if (
-      source !== 'bottle_auto' &&
-      source !== 'hardware_synced' &&
-      amountMl > 0 &&
-      bottle &&
-      bottle.bottleId &&
-      typeof bottle.waterLevel === 'number' &&
-      bottle.waterLevel > 0
-    ) {
-      const newLevel = Math.max(0, bottle.waterLevel - amountMl);
-      await defaultSensorProvider.updateBottleState(bottle.bottleId, {
-        waterLevel: newLevel,
+    // In manual mode or for manual intake additions, decrement virtualWaterLevel
+    // so the bottle UI realistically animates the drop to simulate drinking.
+    // Clamped so virtualWaterLevel never drops below 0 ml (0%).
+    if (source !== 'bottle_auto' && source !== 'hardware_synced') {
+      const maxCap = bottle?.maxCapacity || 2000;
+      setVirtualWaterLevel((prev) => {
+        const current = prev !== null ? prev : (physicalWaterLevel ?? maxCap);
+        return Math.max(0, current - amountMl);
       });
     }
+
+    // ARCHITECTURAL FIX:
+    // We strictly DO NOT update Firestore `waterLevel` on manual intake!
+    // The ESP32 ToF hardware is the single source of truth for physical telemetry.
   };
 
   // Record bottle reading to Firestore
@@ -746,6 +779,50 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
+  // Reset Daily Hydration Goal & Progress
+  const resetDailyHydration = useCallback(async () => {
+    if (!user) return;
+
+    // Reset virtual water level back to live physical water level
+    if (physicalWaterLevel !== null) {
+      setVirtualWaterLevel(physicalWaterLevel);
+      prevPhysicalLevelMlRef.current = physicalWaterLevel;
+    }
+
+    // Immediately clear local hydration logs for today to give instant 0ml UI feedback
+    const todayStr = new Date().toISOString().slice(0, 10);
+    setHydrationLogs((prev) => prev.filter((log) => !log.timestamp?.startsWith(todayStr)));
+
+    // Clean up today's logs from Firestore
+    try {
+      const logsRef = collection(db, 'users', user.uid, 'hydrationLogs');
+      const q = query(logsRef, orderBy('timestamp', 'desc'), limit(100));
+      const snap = await getDocs(q);
+      const batch = writeBatch(db);
+      let count = 0;
+      snap.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.timestamp && data.timestamp.startsWith(todayStr)) {
+          batch.delete(docSnap.ref);
+          count++;
+        }
+      });
+      if (count > 0) {
+        await batch.commit();
+      }
+    } catch (err) {
+      console.warn('Error clearing today hydration logs in Firestore:', err);
+    }
+
+    // Trigger alert notification toast
+    await triggerAlertNotification({
+      type: 'reset',
+      title: 'Hydration Progress Reset',
+      message: 'Daily hydration tracker has been reset to 0 ml.',
+      notificationTag: 'aquasense-manual-reset',
+    });
+  }, [user, physicalWaterLevel, triggerAlertNotification]);
+
   // IoT Simulator controls
   const simulateDrink = (amountMl: number) => {
     if (!bottle) return;
@@ -754,6 +831,8 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const simulateRefill = () => {
     if (!bottle || !bottle.bottleId) return;
+    const maxCap = bottle.maxCapacity || 2000;
+    setVirtualWaterLevel(maxCap);
     defaultSensorProvider.updateBottleState(bottle.bottleId, {
       waterLevel: 100,
       temperature: 16.5,
@@ -822,13 +901,18 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         qualityEval,
         hydrationLogs,
         todayConsumed,
+        dailyHydrationTotal: todayConsumed,
         hardwareConsumed,
         manualConsumed,
         hydrationGoal,
         hydrationPercent,
         remainingMl,
+        physicalWaterLevel,
+        virtualWaterLevel,
         trackingMode,
         setTrackingMode,
+        resetDailyHydration,
+        resetProgress: resetDailyHydration,
         aiTip,
         isStale,
         isOnline,

@@ -1,21 +1,26 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Wifi, Sliders, Zap } from 'lucide-react';
 import { TrackingMode } from '../../types';
 import { HydrationTrackerCard } from './HydrationTrackerCard';
+import { useBottle } from '../../context/BottleContext';
 
 export interface CombinedBottleHydrationCardProps {
-  waterLevel: number | null;
+  waterLevel?: number | null;
+  virtualWaterLevel?: number | null;
+  physicalWaterLevel?: number | null;
   maxCapacity?: number;
-  todayConsumed: number;
+  todayConsumed?: number;
+  dailyHydrationTotal?: number;
   hardwareConsumed?: number;
   manualConsumed?: number;
-  hydrationGoal: number;
-  hydrationPercent: number;
-  remainingMl: number;
+  hydrationGoal?: number;
+  hydrationPercent?: number;
+  remainingMl?: number;
   online?: boolean;
-  onRecordIntake: (amountMl: number, source?: any, note?: string) => Promise<void>;
-  onOpenCustomDrink: () => void;
+  onRecordIntake?: (amountMl: number, source?: any, note?: string) => Promise<void>;
+  onResetProgress?: () => Promise<void>;
+  onOpenCustomDrink?: () => void;
   onRefill?: () => void;
   trackingMode?: TrackingMode;
   onToggleTrackingMode?: (mode: TrackingMode) => void;
@@ -23,8 +28,11 @@ export interface CombinedBottleHydrationCardProps {
 
 export const CombinedBottleHydrationCard: React.FC<CombinedBottleHydrationCardProps> = ({
   waterLevel,
+  virtualWaterLevel: propVirtualWaterLevel,
+  physicalWaterLevel: propPhysicalWaterLevel,
   maxCapacity = 2000,
-  todayConsumed,
+  todayConsumed: propTodayConsumed,
+  dailyHydrationTotal: propDailyHydrationTotal,
   hardwareConsumed,
   manualConsumed,
   hydrationGoal,
@@ -32,37 +40,48 @@ export const CombinedBottleHydrationCard: React.FC<CombinedBottleHydrationCardPr
   remainingMl,
   online = true,
   onRecordIntake,
+  onResetProgress,
   onOpenCustomDrink,
   onRefill,
-  trackingMode,
+  trackingMode: propTrackingMode,
   onToggleTrackingMode,
 }) => {
-  const isLevelOffline = !online || waterLevel === null || waterLevel === undefined;
+  const bottleContext = useBottle();
 
-  // Normalize water level: handle both 0-100% or volume in ml
+  const trackingMode = propTrackingMode ?? bottleContext.trackingMode ?? 'smart_sync';
+  const physicalWaterLevel = propPhysicalWaterLevel ?? bottleContext.physicalWaterLevel;
+  const virtualWaterLevel = propVirtualWaterLevel ?? bottleContext.virtualWaterLevel;
+  const resetDailyHydration = onResetProgress ?? bottleContext.resetDailyHydration;
+  const recordIntake = onRecordIntake ?? bottleContext.recordIntake;
+
+  // The bottle UI liquid graphic strictly renders `virtualWaterLevel`
+  // In smart_sync mode, virtualWaterLevel strictly mirrors physicalWaterLevel
+  // In manual mode, virtualWaterLevel is frozen/decremented by manual intake
+  const activeLevelMl =
+    virtualWaterLevel ??
+    (waterLevel !== undefined && waterLevel !== null
+      ? (waterLevel <= 100 ? Math.round((waterLevel / 100) * maxCapacity) : Math.round(waterLevel))
+      : physicalWaterLevel);
+
+  const isLevelOffline = !online || activeLevelMl === null || activeLevelMl === undefined;
+
+  // Clamp percentage between 0% and 100%
   const bottlePercent = isLevelOffline
     ? null
-    : waterLevel <= 100
-    ? Math.min(100, Math.max(0, Math.round(waterLevel)))
-    : Math.min(100, Math.max(0, Math.round((waterLevel / maxCapacity) * 100)));
+    : Math.min(100, Math.max(0, Math.round(((activeLevelMl ?? 0) / maxCapacity) * 100)));
 
-  const bottleVolumeMl = isLevelOffline
-    ? null
-    : waterLevel <= 100
-    ? Math.round((waterLevel / 100) * maxCapacity)
-    : Math.round(waterLevel);
-
+  const bottleVolumeMl = isLevelOffline ? null : Math.max(0, activeLevelMl ?? 0);
   const bottleLiters = isLevelOffline ? null : ((bottleVolumeMl ?? 0) / 1000).toFixed(2);
   const maxCapacityLiters = (maxCapacity / 1000).toFixed(2);
 
   return (
     <div className="p-3.5 xs:p-4 sm:p-5 lg:p-6 rounded-[24px] sm:rounded-[28px] bg-[#10141D] border border-white/10 shadow-2xl relative overflow-hidden backdrop-blur-xl">
-      {/* Subtle background ambient tint */}
+      {/* Subtle background ambient cyan glow */}
       <div className="absolute top-0 right-1/4 w-80 h-36 bg-[#00D1FF]/5 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Main Responsive Grid: Bottle Visualization + Hybrid Hydration */}
+      {/* Main Responsive Layout: Bottle Silhouette + Hybrid Hydration Tracker */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-5 items-center">
-        {/* ================= 1. PHYSICAL BOTTLE TOF SENSOR DISPLAY ================= */}
+        {/* ================= 1. DECOUPLED BOTTLE LIQUID DISPLAY ================= */}
         <div className="md:col-span-5 lg:col-span-5 flex items-center gap-3 sm:gap-4 p-3 sm:p-3.5 rounded-2xl bg-[#090C12] border border-white/5 relative shadow-inner">
           {/* Smart Bottle Silhouette Graphic */}
           <div className="relative w-14 xs:w-16 sm:w-18 h-32 xs:h-36 sm:h-40 shrink-0 flex flex-col items-center select-none">
@@ -79,12 +98,12 @@ export const CombinedBottleHydrationCard: React.FC<CombinedBottleHydrationCardPr
               {/* Glass Reflection Highlight */}
               <div className="absolute inset-y-1 left-1 w-0.5 bg-gradient-to-b from-white/30 via-white/10 to-transparent rounded-full z-20 pointer-events-none" />
 
-              {/* Water Liquid Column */}
+              {/* Water Liquid Column - Rendered via virtualWaterLevel */}
               <motion.div
                 className="w-full relative overflow-hidden rounded-b-[14px]"
                 initial={{ height: 0 }}
                 animate={{ height: isLevelOffline ? '0%' : `${bottlePercent}%` }}
-                transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
               >
                 {/* Surface Meniscus */}
                 <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-[#00D1FF] via-[#38bdf8] to-[#00A3FF] opacity-90 shadow-sm shadow-[#00D1FF]/50 z-10" />
@@ -105,7 +124,7 @@ export const CombinedBottleHydrationCard: React.FC<CombinedBottleHydrationCardPr
           {/* Bottle Telemetry Text Info */}
           <div className="min-w-0 flex-1 flex flex-col justify-between py-0.5">
             <div>
-              <div className="flex items-center gap-1.5 mb-1">
+              <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                 <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-400">
                   Smart Bottle
                 </span>
@@ -113,10 +132,16 @@ export const CombinedBottleHydrationCard: React.FC<CombinedBottleHydrationCardPr
                   className={`text-[9px] font-mono px-1.5 py-0.2 rounded border ${
                     isLevelOffline
                       ? 'bg-neutral-800 text-neutral-400 border-neutral-700/60'
-                      : 'bg-[#00D1FF]/10 text-[#00D1FF] border-[#00D1FF]/25'
+                      : trackingMode === 'smart_sync'
+                      ? 'bg-[#00D1FF]/10 text-[#00D1FF] border-[#00D1FF]/25'
+                      : 'bg-[#818CF8]/15 text-[#A78BFA] border-[#818CF8]/30'
                   }`}
                 >
-                  {isLevelOffline ? 'Offline' : `${bottlePercent}%`}
+                  {isLevelOffline
+                    ? 'Offline'
+                    : trackingMode === 'smart_sync'
+                    ? `${bottlePercent}% · ToF Live`
+                    : `${bottlePercent}% · Virtual`}
                 </span>
               </div>
 
@@ -134,11 +159,24 @@ export const CombinedBottleHydrationCard: React.FC<CombinedBottleHydrationCardPr
                   </span>
                 )}
               </div>
-              <span className="text-[11px] text-neutral-400 font-mono block mt-0.5">
-                {isLevelOffline
-                  ? 'Time-of-Flight sensor offline'
-                  : `${bottleVolumeMl} ml in flask (ToF synced)`}
-              </span>
+
+              {/* Real-time telemetry context explanation */}
+              <div className="text-[10px] sm:text-[11px] text-neutral-400 font-mono mt-0.5">
+                {isLevelOffline ? (
+                  <span>Time-of-Flight sensor offline</span>
+                ) : trackingMode === 'smart_sync' ? (
+                  <span className="text-neutral-300">
+                    {bottleVolumeMl} ml in flask (ToF synced)
+                  </span>
+                ) : (
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-neutral-300">{bottleVolumeMl} ml simulated level</span>
+                    <span className="text-neutral-500 text-[9px]">
+                      Hardware ToF: {physicalWaterLevel !== null ? `${physicalWaterLevel} ml` : '--'} (decoupled)
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Quick Bottle Refill Action */}
@@ -161,15 +199,19 @@ export const CombinedBottleHydrationCard: React.FC<CombinedBottleHydrationCardPr
         <div className="md:col-span-7 lg:col-span-7 flex flex-col justify-between min-w-0">
           <HydrationTrackerCard
             compact={true}
-            todayConsumed={todayConsumed}
+            todayConsumed={propTodayConsumed}
+            dailyHydrationTotal={propDailyHydrationTotal}
             hydrationGoal={hydrationGoal}
             hydrationPercent={hydrationPercent}
             remainingMl={remainingMl}
             hardwareConsumed={hardwareConsumed}
             manualConsumed={manualConsumed}
+            physicalWaterLevel={physicalWaterLevel}
+            virtualWaterLevel={virtualWaterLevel}
             trackingMode={trackingMode}
             onToggleTrackingMode={onToggleTrackingMode}
-            onRecordIntake={onRecordIntake}
+            onRecordIntake={recordIntake}
+            onResetProgress={resetDailyHydration}
             onOpenCustomDrink={onOpenCustomDrink}
           />
         </div>

@@ -24,13 +24,17 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     bottle,
     qualityEval,
     todayConsumed,
+    dailyHydrationTotal,
     hardwareConsumed,
     manualConsumed,
     hydrationGoal,
     hydrationPercent,
     remainingMl,
+    physicalWaterLevel,
+    virtualWaterLevel,
     trackingMode,
     setTrackingMode,
+    resetDailyHydration,
     aiTip,
     isOnline,
     isDeviceOnline,
@@ -131,8 +135,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         {/* 6. Combined Bottle Water Level + Hydration Module */}
         <CombinedBottleHydrationCard
           waterLevel={bottle?.waterLevel ?? null}
+          virtualWaterLevel={virtualWaterLevel}
+          physicalWaterLevel={physicalWaterLevel}
           maxCapacity={bottle?.maxCapacity ?? 2000}
           todayConsumed={todayConsumed}
+          dailyHydrationTotal={dailyHydrationTotal}
           hardwareConsumed={hardwareConsumed}
           manualConsumed={manualConsumed}
           hydrationGoal={hydrationGoal}
@@ -142,6 +149,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           trackingMode={trackingMode}
           onToggleTrackingMode={setTrackingMode}
           onRecordIntake={recordIntake}
+          onResetProgress={resetDailyHydration}
           onOpenCustomDrink={() => setIsCustomDrinkOpen(true)}
           onRefill={simulateRefill}
         />

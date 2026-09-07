@@ -30,7 +30,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   children,
 }) => {
   const { user, signOut } = useAuth();
-  const { bottle } = useBottle();
+  const { bottle, virtualWaterLevel } = useBottle();
   const { theme } = useTheme();
 
   // Session-persisted collapsed state for laptop/desktop sidebar
@@ -188,7 +188,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
               <div className="relative group">
                 <div
                   className="flex flex-col items-center justify-center p-2 rounded-xl bg-white/[0.03] border border-white/5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
-                  title={`AquaSense X (${bottle.bottleId}) · ${bottle.online ? 'Online' : 'Offline'} · ${bottle.battery}% battery · ${bottle.waterLevel} ml`}
+                  title={`AquaSense X (${bottle.bottleId}) · ${bottle.online ? 'Online' : 'Offline'} · ${bottle.battery}% battery · ${virtualWaterLevel ?? bottle.waterLevel} ml`}
                 >
                   <div className="relative flex items-center justify-center">
                     <Droplets className="w-4 h-4 text-[#00D1FF]" />
@@ -219,7 +219,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                     <span>•</span>
                     <span>{bottle.battery}% Battery</span>
                     <span>•</span>
-                    <span>{bottle.waterLevel} ml</span>
+                    <span>{virtualWaterLevel ?? bottle.waterLevel} ml</span>
                   </div>
                 </div>
               </div>
@@ -245,7 +245,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                     <BatteryMedium className="w-3 h-3 text-emerald-400" />
                     {bottle.battery}%
                   </span>
-                  <span>{bottle.waterLevel} ml fluid</span>
+                  <span>{virtualWaterLevel ?? bottle.waterLevel} ml fluid</span>
                 </div>
               </div>
             )
