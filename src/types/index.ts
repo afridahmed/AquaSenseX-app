@@ -1,3 +1,5 @@
+export type TrackingMode = 'smart_sync' | 'manual';
+
 export interface UserProfile {
   uid: string;
   name: string;
@@ -6,6 +8,7 @@ export interface UserProfile {
   bottleId: string | null;
   assignedBottleId?: string | null;
   hydrationGoal: number; // in ml, e.g. 2500
+  trackingMode?: TrackingMode;
   theme: 'dark' | 'light' | 'system';
   notificationSettings: NotificationPreferences;
   notifications?: NotificationPreferences;

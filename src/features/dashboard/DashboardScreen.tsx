@@ -29,6 +29,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     hydrationGoal,
     hydrationPercent,
     remainingMl,
+    trackingMode,
+    setTrackingMode,
     aiTip,
     isOnline,
     isDeviceOnline,
@@ -137,6 +139,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           hydrationPercent={hydrationPercent}
           remainingMl={remainingMl}
           online={isDeviceOnline}
+          trackingMode={trackingMode}
+          onToggleTrackingMode={setTrackingMode}
           onRecordIntake={recordIntake}
           onOpenCustomDrink={() => setIsCustomDrinkOpen(true)}
           onRefill={simulateRefill}

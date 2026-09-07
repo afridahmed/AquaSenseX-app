@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback, useRef, useMemo } from 'react';
-import { BottleData, HydrationLog, SensorReading, WaterQualityEvaluation } from '../types';
+import { BottleData, HydrationLog, SensorReading, WaterQualityEvaluation, TrackingMode } from '../types';
 import { useAuth } from './AuthContext';
 import { defaultSensorProvider } from '../services/sensor/SensorDataProvider';
 import { evaluateWaterQuality } from '../services/waterQuality/qualityEvaluator';
@@ -35,6 +35,8 @@ interface BottleContextType {
   hydrationGoal: number;
   hydrationPercent: number;
   remainingMl: number;
+  trackingMode: TrackingMode;
+  setTrackingMode: (mode: TrackingMode) => Promise<void>;
   aiTip: string;
   isStale: boolean;
   isOnline: boolean;
@@ -62,6 +64,7 @@ const BottleContext = createContext<BottleContextType | undefined>(undefined);
 
 // 45-second hardware offline watchdog timeout to prevent false-positive offline flips
 const OFFLINE_WATCHDOG_TIMEOUT_MS = 45000;
+const TRACKING_MODE_STORAGE_KEY = 'aquasense_tracking_mode';
 
 export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { user, updateUserProfile } = useAuth();
@@ -71,6 +74,45 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [isSimulatorOpen, setIsSimulatorOpen] = useState<boolean>(false);
   const [isHardwareTimedOut, setIsHardwareTimedOut] = useState<boolean>(false);
   const [toasts, setToasts] = useState<InAppToast[]>([]);
+
+  // Tracking Mode: 'smart_sync' (Auto ToF delta tracking) vs 'manual' (Manual Track)
+  const [trackingMode, setTrackingModeState] = useState<TrackingMode>(() => {
+    try {
+      const saved = localStorage.getItem(TRACKING_MODE_STORAGE_KEY);
+      if (saved === 'smart_sync' || saved === 'manual') return saved as TrackingMode;
+    } catch {}
+    return user?.trackingMode || 'smart_sync';
+  });
+
+  const setTrackingMode = useCallback(
+    async (mode: TrackingMode) => {
+      setTrackingModeState(mode);
+      try {
+        localStorage.setItem(TRACKING_MODE_STORAGE_KEY, mode);
+      } catch (e) {
+        console.warn('Failed to save tracking mode to localStorage', e);
+      }
+      if (user) {
+        try {
+          await updateUserProfile({ trackingMode: mode });
+        } catch (err) {
+          console.warn('Failed to sync tracking mode to user profile', err);
+        }
+      }
+    },
+    [user, updateUserProfile]
+  );
+
+  useEffect(() => {
+    if (user?.trackingMode) {
+      try {
+        const localSaved = localStorage.getItem(TRACKING_MODE_STORAGE_KEY);
+        if (!localSaved) {
+          setTrackingModeState(user.trackingMode);
+        }
+      } catch {}
+    }
+  }, [user?.trackingMode]);
 
   const bottleId = user?.bottleId || user?.assignedBottleId;
   const hydrationGoal = user?.hydrationGoal || 2500;
@@ -257,13 +299,18 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     // A drop in water level (>= 15 ml to ignore ToF micro-jitter) indicates fluid drunk from physical smart bottle
     if (drop >= 15) {
-      recordIntake(drop, 'bottle_auto', 'Detected from Smart Bottle ToF sensor');
+      // Auto Mode (Smart Sync): increment daily hydration total automatically
+      // Manual Mode: delta-tracking is disconnected from daily total
+      if (trackingMode === 'smart_sync') {
+        recordIntake(drop, 'bottle_auto', 'Detected from Smart Bottle ToF sensor');
+      }
+      // Always sync baseline so toggling modes does not trigger phantom delta spikes
       prevPhysicalLevelMlRef.current = currentPhysicalLevelMl;
-    } else if (drop < -30) {
-      // Refill detected
+    } else if (drop < -15) {
+      // Refill detected (water level increased): ignore consumption and sync baseline
       prevPhysicalLevelMlRef.current = currentPhysicalLevelMl;
     }
-  }, [currentPhysicalLevelMl, user]);
+  }, [currentPhysicalLevelMl, user, trackingMode]);
 
   // Calculate today's consumed total (matching today's date in local ISO string)
   const todayDateStr = new Date().toISOString().slice(0, 10);
@@ -780,6 +827,8 @@ export const BottleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         hydrationGoal,
         hydrationPercent,
         remainingMl,
+        trackingMode,
+        setTrackingMode,
         aiTip,
         isStale,
         isOnline,
