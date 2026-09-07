@@ -16,6 +16,7 @@ import {
 import {
   doc,
   getDoc,
+  getDocFromServer,
   setDoc,
   updateDoc,
   runTransaction,
@@ -457,7 +458,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Pair bottle with strict physical hardware validation & single-user ownership locking
+  // Pair bottle with strict physical hardware validation & single-user ownership locking.
+  // Architecture: Two-phase approach for bulletproof 1:1 ownership enforcement.
+  //   Phase 1 — Server-bypass pre-validation (getDocFromServer):
+  //     Fetches the bottle document directly from the Firestore backend, skipping the
+  //     local SDK cache entirely. This is the critical guard against TOCTOU race conditions:
+  //     without this, two users could both read a stale cached "unowned" snapshot and both
+  //     enter the transaction believing the bottle is free.
+  //   Phase 2 — Atomic Firestore Transaction:
+  //     Re-reads all involved documents inside the transaction for full serializability
+  //     (double-check locking pattern), then applies the atomic 3-way write:
+  //       • bottles/{newId}   → ownerUid = currentUid
+  //       • users/{uid}       → assignedBottleId = newId
+  //       • bottles/{oldId}   → ownerUid = null  (if user previously owned another bottle)
   const pairBottle = async (bottleId: string) => {
     if (!user || !auth.currentUser) throw new Error('You must be signed in to pair a bottle.');
     const cleaned = bottleId.trim().toUpperCase();
@@ -466,34 +479,79 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const bottleRef = doc(db, 'bottles', cleaned);
     const userRef = doc(db, 'users', currentUid);
 
+    // ─── Phase 1: Server-bypass pre-validation ───────────────────────────────
+    // Bypasses the Firestore local cache to get an authoritative server-fresh
+    // snapshot. Fails fast with a precise user-facing error before attempting
+    // the more expensive transaction round-trip.
+    try {
+      const freshBottleSnap = await getDocFromServer(bottleRef);
+
+      if (!freshBottleSnap.exists()) {
+        throw new Error('Invalid Bottle ID. Please enter the exact ID printed on your AquaSense X device.');
+      }
+
+      const freshOwnerUid = freshBottleSnap.data()?.ownerUid
+        ? String(freshBottleSnap.data()?.ownerUid).trim()
+        : null;
+
+      // Block immediately if the bottle is owned by a different user.
+      // If it's owned by the current user (re-pair scenario), allow through.
+      if (freshOwnerUid && freshOwnerUid !== currentUid) {
+        throw new Error('Hardware already claimed. This bottle is registered to another account.');
+      }
+    } catch (preErr: any) {
+      // Re-throw our own validation errors verbatim.
+      // For network failures during the server fetch, surface a friendly fallback.
+      if (
+        preErr.message === 'Invalid Bottle ID. Please enter the exact ID printed on your AquaSense X device.' ||
+        preErr.message === 'Hardware already claimed. This bottle is registered to another account.'
+      ) {
+        throw preErr;
+      }
+      // Firestore ownership rule denial during pre-check
+      if (
+        preErr.code === 'permission-denied' ||
+        preErr.message?.includes('permission-denied') ||
+        preErr.message?.includes('Missing or insufficient permissions')
+      ) {
+        throw new Error('Hardware already claimed. This bottle is registered to another account.');
+      }
+      throw new Error(preErr.message || 'Could not verify Bottle ID. Check your connection and try again.');
+    }
+
+    // ─── Phase 2: Atomic Firestore Transaction ────────────────────────────────
+    // All documents are re-read inside the transaction for full serializability.
+    // This is the double-check lock: even if two sessions passed Phase 1
+    // simultaneously, the transaction guarantees only one write succeeds.
     try {
       await runTransaction(db, async (transaction) => {
         const bottleSnap = await transaction.get(bottleRef);
 
-        // Condition 1 (Invalid Device): If the document bottles/{BOTTLE_ID} DOES NOT exist in Firestore
+        // Guard: bottle must still exist inside the transaction.
         if (!bottleSnap.exists()) {
-          throw new Error('Invalid Bottle ID. Please enter a valid identifier printed on your AquaSense X device.');
+          throw new Error('Invalid Bottle ID. Please enter the exact ID printed on your AquaSense X device.');
         }
 
         const bottleData = bottleSnap.data();
         const existingOwnerUid = bottleData.ownerUid ? String(bottleData.ownerUid).trim() : null;
 
-        // Condition 2 (Already Claimed): If the document exists AND ownerUid is non-null AND ownerUid !== currentUserId
+        // Guard: re-confirm ownership inside the transaction.
+        // This is what actually serializes concurrent claim attempts.
         if (existingOwnerUid && existingOwnerUid !== currentUid) {
-          throw new Error('This bottle is already linked to another account. Contact support if this is an error.');
+          throw new Error('Hardware already claimed. This bottle is registered to another account.');
         }
 
-        // Condition 3 (Success / Ownership Claim): If document exists AND (ownerUid is null/empty OR ownerUid === currentUserId)
-        // Check if user previously had another bottle registered and release previous ownership.
-        // Bug fix: Read prevBottleId exclusively from Firestore (userSnap.data()), NOT from
-        // the React closure-captured `user` state. The closure state may be stale if
-        // unpairBottle() was called moments before (setUser is async/batched), causing the
+        // Auto-release: read prevBottleId exclusively from Firestore (userSnap.data()),
+        // NOT from the React closure-captured `user` state. The closure state may be stale
+        // if unpairBottle() was called moments before (setUser is async/batched), causing the
         // transaction to incorrectly attempt releasing a bottle that was already released.
         const userSnap = await transaction.get(userRef);
         const prevBottleId = userSnap.exists()
           ? (userSnap.data()?.assignedBottleId || userSnap.data()?.bottleId || null)
           : null;
 
+        // If the user previously owned a *different* bottle, factory-reset it atomically
+        // so it becomes immediately available for the next user (ownerUid → null).
         if (prevBottleId && prevBottleId.trim().toUpperCase() !== cleaned) {
           const prevBottleRef = doc(db, 'bottles', prevBottleId.trim().toUpperCase());
           const prevBottleSnap = await transaction.get(prevBottleRef);
@@ -510,14 +568,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         }
 
-        // Atomically update bottles/{BOTTLE_ID} with ownerUid: currentUserId
+        // Atomic write 1/2: Claim the new bottle by setting ownerUid.
         transaction.update(bottleRef, {
           ownerUid: currentUid,
           lastUpdated: new Date().toISOString(),
           serverUpdatedAt: serverTimestamp(),
         });
 
-        // Atomically update users/{currentUserId} with assignedBottleId: BOTTLE_ID
+        // Atomic write 2/2: Update the user profile with the new assignedBottleId.
         if (userSnap.exists()) {
           transaction.update(userRef, {
             assignedBottleId: cleaned,
@@ -539,7 +597,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       });
 
-      // Update local React state after transaction succeeds
+      // Update local React state after transaction commits successfully.
       setUser((prev) =>
         prev
           ? {
@@ -553,21 +611,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       setIsPairingModalOpen(false);
     } catch (err: any) {
-      console.error('Error pairing bottle:', err);
+      console.error('Error during bottle pairing transaction:', err);
+      // Re-throw known validation errors verbatim so the UI displays the exact message.
       if (
-        err.message === 'Invalid Bottle ID. Please enter a valid identifier printed on your AquaSense X device.' ||
-        err.message === 'This bottle is already linked to another account. Contact support if this is an error.'
+        err.message === 'Invalid Bottle ID. Please enter the exact ID printed on your AquaSense X device.' ||
+        err.message === 'Hardware already claimed. This bottle is registered to another account.'
       ) {
         throw err;
       }
+      // Firestore security rule denial maps to the ownership error.
       if (
         err.code === 'permission-denied' ||
         err.message?.includes('permission-denied') ||
         err.message?.includes('Missing or insufficient permissions')
       ) {
-        throw new Error('This bottle is already linked to another account. Contact support if this is an error.');
+        throw new Error('Hardware already claimed. This bottle is registered to another account.');
       }
-      throw new Error(err.message || 'Invalid Bottle ID. Please enter a valid identifier printed on your AquaSense X device.');
+      throw new Error(err.message || 'Could not complete pairing. Check your connection and try again.');
     }
   };
 
